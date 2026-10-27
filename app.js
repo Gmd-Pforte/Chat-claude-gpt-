@@ -7,7 +7,7 @@
   "use strict";
 
   const ISSUE_URL = "https://github.com/Gmd-Pforte/Chat-claude-gpt-/issues/1";
-  const POLL_MS = 60_000;
+  const POLL_MS = 120_000; // GitHub erlaubt ohne Anmeldung nur 60 Anfragen pro Stunde
   const ROLE_LABEL = { chatgpt: "ChatGPT", claude: "Claude", peter: "Peter" };
 
   const $ = (id) => document.getElementById(id);
