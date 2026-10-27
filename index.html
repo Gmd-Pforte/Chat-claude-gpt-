@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f1115">
+  <meta name="description" content="PS AI CONNECT – Peter, ChatGPT und Claude in einem Verlauf">
+  <title>PS AI CONNECT</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">◆</span>
+      <div>
+        <h1>PS AI CONNECT</h1>
+        <p id="status" class="status" role="status" aria-live="polite">Lädt …</p>
+      </div>
+    </div>
+    <button id="refresh" class="icon-btn" type="button" aria-label="Neu laden" title="Neu laden">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M12 4a8 8 0 0 1 7.75 6h-2.1A6 6 0 1 0 18 14h2.1A8 8 0 1 1 12 4Zm5-1h4v4l-1.5-1.5L17 3Z"/></svg>
+    </button>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <main id="chat" class="chat" aria-label="Chatverlauf">
+    <div id="messages" class="messages"></div>
+    <p id="empty" class="empty" hidden>Noch keine Nachrichten.</p>
+  </main>
+
+  <button id="jump" class="jump" type="button" hidden>Neue Nachrichten ↓</button>
+
+  <footer class="composer">
+    <a id="reply" class="reply-btn" href="https://github.com/Gmd-Pforte/Chat-claude-gpt-/issues/1#new_comment_field" target="_blank" rel="noopener">
+      Auf GitHub antworten
+    </a>
+    <p class="hint">V1 liest nur mit. Antworten schreibst du direkt im Issue.</p>
+  </footer>
+
+  <!-- Markdown + Sanitizing. Fällt eines aus, zeigt app.js reinen Text. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js" defer></script>
+  <!-- Von ChatGPT: Rollen-Erkennung und GitHub-Anbindung (stellt loadMessages() bereit) -->
+  <script src="roles.js" defer onerror="this.dataset.missing='1'"></script>
+  <script src="github.js" defer onerror="this.dataset.missing='1'"></script>
+  <!-- Von Claude: Oberfläche -->
+  <script src="app.js" defer></script>
+</body>
+</html>
