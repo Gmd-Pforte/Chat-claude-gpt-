@@ -32,6 +32,7 @@ header::-webkit-scrollbar{display:none}
 .logo{width:34px;height:34px;border-radius:50%;background:var(--accent);color:#1d1208;display:grid;place-items:center;font:700 15px var(--display);
   border:3px solid #2a1d14;box-shadow:2px 2px 0 #2a1d14}
 .bname{font:600 18px var(--display);letter-spacing:.2px;white-space:nowrap}
+.ver{font-size:11px;font-weight:700;color:var(--mute);border:1px solid var(--line);border-radius:20px;padding:1px 7px;white-space:nowrap}
 #projName{width:180px;min-width:120px;height:34px;background:var(--ink);border:1px solid var(--line);border-radius:8px;padding:0 10px;flex:none}
 .hgroup{display:flex;gap:6px;margin-left:auto;flex:none}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:36px;padding:0 12px;border-radius:9px;border:1px solid var(--line);
@@ -157,7 +158,7 @@ details.grp summary{font:600 14px var(--display);cursor:pointer;margin-bottom:8p
 <body>
 <div id="app">
   <header>
-    <div class="brand"><span class="logo">PS</span><span class="bname">Cartoon Studio</span></div>
+    <div class="brand"><span class="logo">PS</span><span class="bname">Cartoon Studio</span><span class="ver" id="appVer" title="Version des Studios"></span></div>
     <input id="projName" type="text" aria-label="Projektname" title="Projektname">
     <div class="hgroup">
       <button class="btn ico" id="bUndo" title="Rückgängig (Strg+Z)" aria-label="Rückgängig">↶</button>
@@ -212,6 +213,7 @@ details.grp summary{font:600 14px var(--display);cursor:pointer;margin-bottom:8p
 
 <script>
 'use strict';
+const APP_VERSION = '1.7';
 /* =====================================================================
    PS Cartoon Studio 1.0
    Aufbau:
@@ -1998,12 +2000,31 @@ document.addEventListener('keydown', e => {
 new ResizeObserver(() => { drawStage(); }).observe($('#stageWrap'));
 let lastW = window.innerWidth; window.addEventListener('resize', () => { if (project && Math.abs(window.innerWidth - lastW) > 40) { lastW = window.innerWidth; renderTimeline(); } });
 
+// ---------- Update-Prüfung ----------
+// Holt die Seite am Cache vorbei und lädt neu, wenn auf GitHub eine neuere Version liegt.
+async function checkForUpdate() {
+  if (!/^https?:/.test(location.protocol)) return;
+  try {
+    const r = await fetch(location.pathname + '?check=' + Date.now(), { cache: 'no-store' });
+    const m = (await r.text()).match(/const APP_VERSION = '([\d.]+)'/);
+    if (!m || m[1] === APP_VERSION) return;
+    let tried = null; try { tried = sessionStorage.getItem('ps-update'); } catch (e) {}
+    if (tried === m[1]) { toast('Neue Version ' + m[1] + ' verfügbar – bitte die Seite neu laden.'); return; }
+    try { sessionStorage.setItem('ps-update', m[1]); } catch (e) {}
+    await new Promise(res => setTimeout(res, 1600)); // Autosave abwarten
+    location.replace(location.pathname + '?v=' + m[1]);
+  } catch (e) { /* offline – egal */ }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForUpdate(); });
+
 // ---------- Start ----------
 (async function boot() {
   let data = null;
   try { const rec = await dbGet(AUTO); if (rec && rec.data) data = rec.data; } catch (e) { console.warn('Kein lokaler Speicher', e); }
   try { await loadData(data || exampleProject()); if (data) toast('Letzter Stand wiederhergestellt'); }
   catch (e) { console.error(e); await loadData(exampleProject()); }
+  $('#appVer').textContent = 'v' + APP_VERSION;
+  checkForUpdate();
 })();
 </script>
 </body>
