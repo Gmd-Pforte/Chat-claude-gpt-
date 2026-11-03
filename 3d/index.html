@@ -63,6 +63,35 @@ button,input{font:inherit;color:inherit}
   .chip{height:38px;padding:0 12px;font-size:13px}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* Film-Zeitleiste: eigener Editor über der bestehenden Studio-Bedienung. */
+#timelineToggle{border:1px solid var(--line);border-radius:20px;padding:6px 12px;background:var(--panel);font-weight:700;cursor:pointer;white-space:nowrap}
+#timelineToggle.on{background:var(--accent);color:#21140c}
+#timelineEditor{position:fixed;z-index:4;left:50%;bottom:calc(110px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);width:min(920px,calc(100% - 20px));padding:10px;background:rgba(27,24,36,.97);border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 32px #0008}
+.tltools{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.tltools button,.tltools select{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:7px 10px;color:var(--text);cursor:pointer}
+.tltools button:disabled{opacity:.4;cursor:default}
+.tltools select{min-width:115px;max-width:180px}
+#tlClock{font-variant-numeric:tabular-nums;color:var(--sel);font-weight:700}
+#tlViewport{overflow-x:auto;margin-top:10px;touch-action:pan-x}
+#tlTrack{position:relative;height:68px;min-width:100%;background:repeating-linear-gradient(90deg,#343041 0 1px,transparent 1px 80px),#1c1a26;border:1px solid var(--line);border-radius:8px;touch-action:pan-x}
+.tlclip{position:absolute;top:27px;height:33px;background:linear-gradient(180deg,#377a91,#215b77);border:1px solid #5fd0ed;border-radius:6px;color:white;font-size:12px;font-weight:700;display:flex;align-items:center;padding:0 14px 0 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:grab;touch-action:none;user-select:none}
+.tlclip.gesture{background:linear-gradient(180deg,#a35e81,#71375e);border-color:#fc9fc4}
+.tlclip.selected{outline:2px solid #ffd166;z-index:2}
+.tlresize{position:absolute;right:0;top:0;bottom:0;width:12px;border-left:2px solid #ffffff88;cursor:ew-resize}
+#tlPlayhead{position:absolute;top:0;bottom:0;width:2px;background:#ffd166;pointer-events:none;z-index:3}
+#tlPlayhead:before{content:'';position:absolute;top:0;left:-5px;border-left:6px solid transparent;border-right:6px solid transparent;border-top:10px solid #ffd166}
+#tlTicks{height:22px;position:relative;font-size:10px;color:var(--mute);cursor:crosshair}
+#tlTicks span{position:absolute;top:0;transform:translateX(-50%)}
+#tlHint{font-size:11px;color:var(--mute);padding-top:6px}
+@media(max-width:640px){
+ #timelineEditor{bottom:calc(112px + env(safe-area-inset-bottom,0px));padding:8px}
+ #timelineToggle{padding:6px 8px;font-size:12px}
+ .tltools{gap:5px}.tltools button,.tltools select{padding:6px 8px;font-size:12px}
+ #tlTrack{height:62px}
+ #tlHint{font-size:10px}
+}
+
 </style>
 </head>
 <body>
@@ -70,6 +99,7 @@ button,input{font:inherit;color:inherit}
 <div id="top">
   <div class="brand"><span class="logo">PS</span><div class="bt"><b>3D-Studio</b><span>Musikvideo · Toon-Shading · Skelett</span></div></div>
   <a id="to2d" href="../" title="Zum 2D-Studio">2D</a>
+<button id="timelineToggle" type="button" aria-controls="timelineEditor" aria-expanded="false">🎬 Zeitleiste</button>
   <div id="status">Stehen</div>
   <div class="spacer"></div>
   <div id="stats">– FPS</div>
@@ -81,6 +111,25 @@ button,input{font:inherit;color:inherit}
   <nav id="tabs"></nav>
   <div class="chips" id="chips"></div>
 </section>
+
+<section id="timelineEditor" aria-label="Film-Zeitleiste" hidden>
+  <div class="tltools">
+    <button type="button" id="tlPlay" title="Film abspielen">▶ Abspielen</button>
+    <button type="button" id="tlStop" title="Zurück zum Anfang">■ Anfang</button>
+    <span id="tlClock">00:00 / 00:30</span>
+    <select id="tlNewType" aria-label="Animation auswählen"></select>
+    <button type="button" id="tlAdd">+ Block</button>
+    <button type="button" id="tlDelete" disabled>Entfernen</button>
+  </div>
+  <div id="tlViewport">
+    <div id="tlTicks" aria-label="Zeitachse"></div>
+    <div id="tlTrack" aria-label="Animationsspur für PS Peter">
+      <div id="tlPlayhead"></div>
+    </div>
+  </div>
+  <div id="tlHint">Block ziehen = verschieben · rechten Rand ziehen = Dauer ändern · oben auf Zeitachse tippen = springen · 30 Sekunden Testszene</div>
+</section>
+
 <input type="file" id="fVoice" accept="audio/*,.mp3,.wav" hidden>
 <div id="err" hidden><div><b>3D konnte nicht starten</b><span id="errMsg">Dein Browser unterstützt kein WebGL oder Three.js konnte nicht geladen werden. Bitte mit Internetverbindung in Chrome, Edge, Firefox oder Safari öffnen.</span></div></div>
 
@@ -1028,6 +1077,7 @@ function frame(now) {
   renderer.render(scene, camera);
 }
 function step(dt, real) {
+  tlAdvance(dt);
   if (video.on) videoStep(dt);
   else if (task && dt > 0 && task.update(dt)) nextTask();
   if (dt > 0) { yawVel = damp(yawVel, 0, 4, dt); }
@@ -1053,6 +1103,132 @@ function step(dt, real) {
   clouds.forEach((c, i) => { c.position.x += real * (0.15 + i * 0.03); if (c.position.x > 26) c.position.x = -26; });
   updateCam(real);
 }
+
+
+// ---------- Film-Editor, Etappe 1: echte verschiebbare Animationsblöcke ----------
+const tl = {
+  duration:30, t:0, playing:false, selected:null, current:null, nextId:4,
+  clips:[
+    {id:1,kind:'clip',name:'idle',label:'Stehen',start:0,dur:4},
+    {id:2,kind:'clip',name:'walk',label:'Gehen',start:4,dur:5},
+    {id:3,kind:'gesture',name:'wave',label:'Winken',start:10,dur:3}
+  ]
+};
+const TL_PX = 80;
+const TL_OPTIONS = [
+  ['clip','idle','Stehen'],['clip','walk','Gehen'],['clip','run','Laufen'],
+  ['clip','turn','Drehen'],['clip','bounce','Tanzen'],['clip','sway','Schwingen'],
+  ['clip','disco','Disco'],['clip','hop','Hüpfen'],['clip','cheer','Jubeln'],
+  ['clip','clap','Klatschen'],['gesture','wave','Winken'],['gesture','point','Zeigen'],
+  ['gesture','talk','Sprechen'],['gesture','laugh','Lachen'],
+  ['gesture','cry','Weinen'],['gesture','scare','Erschrecken']
+];
+const tlTrack = document.getElementById('tlTrack'), tlTicks = document.getElementById('tlTicks');
+const tlClock = document.getElementById('tlClock'), tlPlayhead = document.getElementById('tlPlayhead');
+function tlFormat(sec){return String(Math.floor(sec/60)).padStart(2,'0')+':'+String(Math.floor(sec%60)).padStart(2,'0');}
+function tlClipAt(t){return tl.clips.filter(c=>t>=c.start && t<c.start+c.dur).sort((a,b)=>b.start-a.start)[0]||null;}
+function tlClockUpdate(){
+ tlClock.textContent=tlFormat(tl.t)+' / '+tlFormat(tl.duration);
+ tlPlayhead.style.left=(tl.t*TL_PX)+'px';
+ document.getElementById('tlPlay').textContent=tl.playing?'❚❚ Pause':'▶ Abspielen';
+}
+function tlApply(force){
+ const c=tlClipAt(tl.t), id=c?c.id:0;
+ if(force || id!==tl.current){
+   tl.current=id;
+   if(c?.kind==='gesture'){playClip('idle',0.12);playGesture(c.name);}
+   else {gesture=null;playClip(c?.name||'idle',0.12);}
+   mode=c?'Film: '+c.label:'Film: Pause';status();
+ }
+ if(c){
+   const elapsed=Math.max(0,tl.t-c.start);
+   if(c.kind==='clip' && actions[c.name] && CLIPS[c.name]){
+     actions[c.name].time=elapsed%CLIPS[c.name].duration;
+   }
+   if(c.kind==='gesture' && gesture){
+     gesture.t=Math.min(elapsed,GESTURES[c.name].dur-.001);
+   }
+ }
+}
+function tlSeek(sec){
+ tl.t=Math.max(0,Math.min(tl.duration,sec));
+ tlApply(true);tlClockUpdate();
+}
+function tlAdvance(dt){
+ if(!tl.playing || video.on || dt<=0)return;
+ tl.t=Math.min(tl.duration,tl.t+dt);
+ tlApply(false);tlClockUpdate();
+ if(tl.t>=tl.duration){tl.playing=false;tlClockUpdate();}
+}
+function tlRender(){
+ const width=tl.duration*TL_PX;
+ tlTrack.style.width=width+'px';tlTicks.style.width=width+'px';
+ tlTrack.querySelectorAll('.tlclip').forEach(n=>n.remove());
+ tlTicks.replaceChildren();
+ for(let sec=0;sec<=tl.duration;sec+=2){
+   const tick=document.createElement('span');tick.style.left=(sec*TL_PX)+'px';tick.textContent=sec+'s';tlTicks.append(tick);
+ }
+ tl.clips.sort((a,b)=>a.start-b.start).forEach(c=>{
+   const b=document.createElement('div');b.className='tlclip'+(c.kind==='gesture'?' gesture':'')+(tl.selected===c.id?' selected':'');
+   b.style.left=(c.start*TL_PX)+'px';b.style.width=(c.dur*TL_PX)+'px';b.textContent=c.label;
+   b.title=c.label+' · '+c.start.toFixed(1)+'s · '+c.dur.toFixed(1)+'s';
+   const grip=document.createElement('span');grip.className='tlresize';grip.title='Dauer ändern';b.append(grip);
+   b.addEventListener('pointerdown',e=>{
+     if(e.button!==0)return;
+     e.preventDefault();tl.selected=c.id;
+     tlTrack.querySelectorAll('.tlclip').forEach(x=>x.classList.toggle('selected',x===b));
+     const node=b;
+     const resizing=e.target.classList.contains('tlresize');
+     const startX=e.clientX, oldStart=c.start, oldDur=c.dur;
+     node.setPointerCapture(e.pointerId);
+     node.onpointermove=ev=>{
+       const diff=(ev.clientX-startX)/TL_PX;
+       if(resizing)c.dur=Math.max(.5,Math.min(tl.duration-c.start,Math.round((oldDur+diff)*10)/10));
+       else c.start=Math.max(0,Math.min(tl.duration-c.dur,Math.round((oldStart+diff)*10)/10));
+       node.style.left=(c.start*TL_PX)+'px';node.style.width=(c.dur*TL_PX)+'px';
+     };
+     node.onpointerup=()=>{
+       node.onpointermove=null;node.onpointerup=null;
+       tlApply(true);tlRender();
+     };
+     document.getElementById('tlDelete').disabled=false;
+   });
+   tlTrack.append(b);
+ });
+ document.getElementById('tlDelete').disabled=tl.selected==null;
+ tlClockUpdate();
+}
+function tlOpen(open){
+ const panel=document.getElementById('timelineEditor'),button=document.getElementById('timelineToggle');
+ panel.hidden=!open;button.classList.toggle('on',open);button.setAttribute('aria-expanded',String(open));
+ if(open){if(video.on)stopVideo();tlRender();}
+ else {tl.playing=false;tlClockUpdate();}
+}
+const tlSelect=document.getElementById('tlNewType');
+for(const [kind,name,label] of TL_OPTIONS){const opt=document.createElement('option');opt.value=kind+':'+name;opt.textContent=label;tlSelect.append(opt);}
+document.getElementById('timelineToggle').onclick=()=>tlOpen(document.getElementById('timelineEditor').hidden);
+document.getElementById('tlPlay').onclick=()=>{
+ if(video.on)stopVideo();
+ if(tl.t>=tl.duration)tlSeek(0);
+ tl.playing=!tl.playing;
+ if(tl.playing){runTasks([],'Film');if(paused)setPaused(false);tlApply(true);}
+ tlClockUpdate();
+};
+document.getElementById('tlStop').onclick=()=>{tl.playing=false;tlSeek(0);};
+document.getElementById('tlAdd').onclick=()=>{
+ const [kind,name]=tlSelect.value.split(':'),option=TL_OPTIONS.find(x=>x[0]===kind&&x[1]===name);
+ const dur=Math.min(3,tl.duration), start=Math.min(tl.duration-dur,Math.max(0,Math.round(tl.t*2)/2));
+ const c={id:tl.nextId++,kind,name,label:option[2],start,dur};
+ tl.clips.push(c);tl.selected=c.id;tlRender();
+ document.getElementById('tlViewport').scrollLeft=Math.max(0,c.start*TL_PX-150);
+};
+document.getElementById('tlDelete').onclick=()=>{
+ tl.clips=tl.clips.filter(c=>c.id!==tl.selected);tl.selected=null;tlApply(true);tlRender();
+};
+tlTicks.addEventListener('pointerdown',e=>{tl.playing=false;tlSeek((e.clientX-tlTicks.getBoundingClientRect().left)/TL_PX);});
+tlTrack.addEventListener('pointerdown',e=>{
+ if(e.target===tlTrack){tl.playing=false;tl.selected=null;tlSeek((e.clientX-tlTrack.getBoundingClientRect().left)/TL_PX);tlRender();}
+});
 
 // ---------- Bedienoberfläche ----------
 const TABS = {
