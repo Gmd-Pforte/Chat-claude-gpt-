@@ -137,6 +137,16 @@ button,input{font:inherit;color:inherit}
 #panel.expanded .propControls button{min-width:0}
 #panel.expanded .propControls span{grid-column:1/-1}}
 
+
+/* Filmprojekt-Editor */
+.filmControls{display:flex;align-items:center;gap:7px;flex-wrap:wrap;max-height:180px;overflow-y:auto}
+.filmControls button,.filmControls input,.filmControls select{font:600 13px var(--body);color:var(--text);border:1px solid var(--line);background:var(--panel2);border-radius:9px;padding:8px 10px;min-height:40px}
+.filmControls button{cursor:pointer}.filmControls input{width:160px}.filmControls select{max-width:175px}
+.filmControls span{font-size:12px;color:var(--sel)}
+@media(max-width:640px){#panel.expanded .filmControls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-column:1/-1;max-height:none}
+#panel.expanded .filmControls input,#panel.expanded .filmControls select{width:100%;max-width:none}
+#panel.expanded .filmControls button{min-height:48px}}
+
 </style>
 </head>
 <body>
@@ -1360,7 +1370,11 @@ function tlAdvance(dt){
  if(!tl.playing || video.on || dt<=0)return;
  tl.t=Math.min(tl.duration,tl.t+dt);
  tlApply(false);tlClockUpdate();
- if(tl.t>=tl.duration){tl.playing=false;tlClockUpdate();}
+ if(tl.t>=tl.duration){
+   if(playAllScenes && filmSceneIndex<filmScenes.length-1){activateFilmScene(filmSceneIndex+1,true);tl.playing=true;tlApply(true);}
+   else{tl.playing=false;playAllScenes=false;}
+   tlClockUpdate();
+ }
 }
 function tlRender(){
  const width=tl.duration*TL_PX;
@@ -1412,7 +1426,7 @@ document.getElementById('timelineToggle').onclick=()=>tlOpen(document.getElement
 document.getElementById('tlPlay').onclick=()=>{
  if(video.on)stopVideo();
  if(tl.t>=tl.duration)tlSeek(0);
- tl.playing=!tl.playing;
+ playAllScenes=false;tl.playing=!tl.playing;
  if(tl.playing){runTasks([],'Film');if(paused)setPaused(false);tlApply(true);}
  tlClockUpdate();
 };
@@ -1432,9 +1446,165 @@ tlTrack.addEventListener('pointerdown',e=>{
  if(e.target===tlTrack){tl.playing=false;tl.selected=null;tlSeek((e.clientX-tlTrack.getBoundingClientRect().left)/TL_PX);tlRender();}
 });
 
+
+// ---------- Filmprojekte: mehrere Szenen, lokal sichern, JSON importieren/exportieren ----------
+let filmTitle='Mein 3D-Film',filmSceneIndex=0,playAllScenes=false,sceneSerial=1;
+let filmScenes=[{id:1,name:'Szene 1',duration:tl.duration,bg:stageName,clips:tl.clips,propData:[]}];
+const activeFilmScene=()=>filmScenes[filmSceneIndex];
+function snapshotProps(){
+ return props.map(p=>({type:p.type,stage:p.stage,x:p.obj.position.x,z:p.obj.position.z,
+   rotation:p.obj.rotation.y,scale:p.obj.scale.x}));
+}
+function clearSceneObjects(){props.forEach(p=>p.obj.parent?.remove(p.obj));props.splice(0);activeProp=null;}
+function rebuildProps(data){
+ clearSceneObjects();
+ for(const p of (Array.isArray(data)?data:[]).slice(0,100)){
+   if(!propNames[p.type]||!stageNames[p.stage])continue;
+   const obj=buildProp(p.type);obj.position.set(clamp(Number(p.x)||0,-30,30),0,clamp(Number(p.z)||0,-30,30));
+   obj.rotation.y=Number(p.rotation)||0;
+   obj.scale.setScalar(clamp(Number(p.scale)||1,.2,4));propsRoot.add(obj);
+   props.push({id:++propSerial,type:p.type,stage:p.stage,obj});
+ }
+ showStageProps();
+}
+function rememberScene(){
+ const sceneData=activeFilmScene();
+ if(!sceneData)return;
+ sceneData.duration=tl.duration;sceneData.bg=stageName;
+ sceneData.clips=tl.clips.map(c=>({...c}));sceneData.propData=snapshotProps();
+}
+function activateFilmScene(index,save=true){
+ if(index<0||index>=filmScenes.length)return;
+ if(save)rememberScene();
+ filmSceneIndex=index;
+ const data=activeFilmScene();tl.duration=data.duration;tl.clips=data.clips.map(c=>({...c}));
+ tl.nextId=Math.max(1,...tl.clips.map(c=>c.id||0))+1;
+ tl.t=0;tl.current=null;tl.selected=null;
+ stageName=data.bg||'park';setStage(stageName);rebuildProps(data.propData);
+ tlRender();renderChips();refreshProjectControls();
+}
+function createFilmScene(){
+ rememberScene();const id=++sceneSerial;
+ filmScenes.push({id,name:'Szene '+filmScenes.length+1,duration:30,bg:stageName,clips:[],propData:[]});
+ playAllScenes=false;tl.playing=false;activateFilmScene(filmScenes.length-1,false);
+}
+function removeFilmScene(){
+ if(filmScenes.length<=1){toast('Mindestens eine Szene muss bleiben');return;}
+ tl.playing=false;filmScenes.splice(filmSceneIndex,1);
+ activateFilmScene(Math.min(filmSceneIndex,filmScenes.length-1),false);
+}
+function filmDocument(){
+ rememberScene();
+ const typeMap={idle:'pose',walk:'gehen',run:'laufen',turn:'pose',bounce:'tanzen',
+  sway:'tanzen',disco:'disco',hop:'huepfen',cheer:'jubeln',clap:'klatschen',
+  wave:'winken',point:'zeigen',talk:'sprechen',laugh:'lachen',cry:'weinen',scare:'erschrecken'};
+ return {project:{
+   name:filmTitle,format:frameMode==='portrait'?'hoch':'quer',active:filmSceneIndex,
+   scenes:filmScenes.map(s=>({
+     id:s.id,name:s.name,duration:s.duration,bg:s.bg,camera:{x:0,y:0,zoom:1,follow:false},fx:{},
+     actors:[{id:'actor1',name:studioCharacter==='baer'?'PS Bär':'PS Peter',kind:'3d',
+       char:studioCharacter==='baer'?'ps-baer':'ps-peter',x:0,y:0,scale:1,flip:false,look:'front',
+       clips:s.clips.map(c=>({id:String(c.id),type:typeMap[c.name]||'pose',start:c.start,dur:c.dur,
+         speed:1,intensity:1,animation:c.name,layer:c.kind}))}],
+     props:s.propData.map((p,i)=>({id:'prop'+i,kind:'3d',name:p.type,type:p.type,
+       stage:p.stage,x:p.x,y:0,z:p.z,rotation:p.rotation,scale:p.scale})),
+     audio:[]
+   }))
+ },assets:{}};
+}
+function safeProject(json){
+ const p=json?.project;if(!p||!Array.isArray(p.scenes)||p.scenes.length===0)throw Error('Keine gültigen Szenen im Projekt');
+ const next=p.scenes.slice(0,50).map((s,i)=>{
+   const actor=Array.isArray(s.actors)?s.actors.find(a=>a.kind==='3d'):null;
+   const entries=Array.isArray(actor?.clips)?actor.clips:[];
+   const nameMap={pose:'idle',gehen:'walk',laufen:'run',tanzen:'bounce',disco:'disco',
+     huepfen:'hop',jubeln:'cheer',klatschen:'clap',winken:'wave',
+     zeigen:'point',sprechen:'talk',lachen:'laugh',weinen:'cry',erschrecken:'scare'};
+   const clips=entries.slice(0,200).map((c,j)=>{
+     const name=TL_OPTIONS.some(x=>x[1]===c.animation)?c.animation:nameMap[c.type]||'idle';
+     const item=TL_OPTIONS.find(x=>x[1]===name),duration=clamp(Number(s.duration)||30,1,600);
+     const st=clamp(Number(c.start)||0,0,duration-.5);
+     return {id:j+1,kind:item[0],name,label:item[2],start:st,
+       dur:clamp(Number(c.dur)||3,.5,duration-st)};
+   });
+   const propData=(Array.isArray(s.props)?s.props:[]).slice(0,100)
+     .filter(x=>propNames[x.type||x.name])
+     .map(x=>({type:x.type||x.name,stage:stageNames[x.stage]?x.stage:stageNames[s.bg]?s.bg:'park',
+       x:Number(x.x)||0,z:Number(x.z)||0,rotation:Number(x.rotation)||0,scale:Number(x.scale)||1}));
+   return {id:i+1,name:String(s.name||'Szene '+(i+1)).slice(0,100),
+     duration:clamp(Number(s.duration)||30,1,600),bg:stageNames[s.bg]?s.bg:'park',
+     clips,propData};
+ });
+ return {name:String(p.name||'Mein 3D-Film').slice(0,120),scenes:next,
+   active:clamp(Number(p.active)||0,0,next.length-1),
+   format:p.format==='hoch'?'portrait':'landscape',
+   char:p.scenes?.[0]?.actors?.[0]?.char==='ps-baer'?'baer':'peter'};
+}
+function loadFilmDocument(data){
+ const checked=safeProject(data);
+ tl.playing=false;playAllScenes=false;
+ filmTitle=checked.name;filmScenes=checked.scenes;sceneSerial=filmScenes.length;
+ activateFilmScene(checked.active,false);setFrameMode(checked.format);chooseCharacter(checked.char);
+ toast('Projekt geladen: '+filmTitle);
+}
+function saveFilmLocal(){
+ try{localStorage.setItem('ps-3d-film-project',JSON.stringify(filmDocument()));toast('Filmprojekt auf diesem Gerät gespeichert');}
+ catch(e){toast('Speichern fehlgeschlagen – bitte JSON exportieren');}
+}
+function loadFilmLocal(){
+ try{
+   const raw=localStorage.getItem('ps-3d-film-project');
+   if(!raw){toast('Auf diesem Gerät ist noch kein Filmprojekt gespeichert');return;}
+   loadFilmDocument(JSON.parse(raw));
+ }catch(e){toast('Projekt konnte nicht geladen werden');}
+}
+function exportFilmJSON(){
+ const text=JSON.stringify(filmDocument(),null,2);
+ const url=URL.createObjectURL(new Blob([text],{type:'application/json'}));
+ const link=document.createElement('a');link.href=url;
+ link.download=(filmTitle.replace(/[^\wäöüÄÖÜß-]+/g,'_')||'PS_Cartoon_3D')+'.json';
+ document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);
+}
+const importFilmInput=document.createElement('input');importFilmInput.type='file';importFilmInput.accept='.json,application/json';importFilmInput.hidden=true;document.body.append(importFilmInput);
+importFilmInput.onchange=async()=>{
+ const file=importFilmInput.files?.[0];importFilmInput.value='';if(!file)return;
+ try{if(file.size>5e6)throw Error('Zu groß');loadFilmDocument(JSON.parse(await file.text()));}
+ catch(e){toast('JSON-Datei ungültig oder nicht unterstützt');}
+};
+function playWholeFilm(){
+ if(video.on)stopVideo();
+ activateFilmScene(0,true);playAllScenes=true;
+ tl.playing=true;runTasks([],'Film');if(paused)setPaused(false);tlApply(true);tlClockUpdate();
+}
+function refreshProjectControls(){
+ const el=document.getElementById('filmSceneSelect');if(!el)return;
+ el.replaceChildren();
+ filmScenes.forEach((s,i)=>{
+   const o=document.createElement('option');o.value=i;o.textContent=(i+1)+'. '+s.name;el.append(o);
+ });
+ el.value=filmSceneIndex;
+ const counter=document.getElementById('filmSceneCount');if(counter)counter.textContent=filmScenes.length+' Szenen';
+}
+function buildProjectControls(container){
+ const wrap=document.createElement('div');wrap.className='filmControls';container.append(wrap);
+ const title=document.createElement('input');title.value=filmTitle;title.placeholder='Filmname';title.setAttribute('aria-label','Filmname');
+ title.onchange=()=>filmTitle=title.value.slice(0,120)||'Mein 3D-Film';wrap.append(title);
+ const sceneSelect=document.createElement('select');sceneSelect.id='filmSceneSelect';sceneSelect.setAttribute('aria-label','Szene auswählen');wrap.append(sceneSelect);
+ sceneSelect.onchange=()=>{tl.playing=false;playAllScenes=false;activateFilmScene(Number(sceneSelect.value));};
+ const counter=document.createElement('span');counter.id='filmSceneCount';wrap.append(counter);
+ const actions=[
+   ['+ Szene',createFilmScene],['− Szene',removeFilmScene],['▶ Ganzer Film',playWholeFilm],
+   ['💾 Speichern',saveFilmLocal],['📂 Laden',loadFilmLocal],
+   ['↓ JSON',exportFilmJSON],['↑ JSON',()=>importFilmInput.click()]
+ ];
+ for(const [label,fn] of actions){const btn=document.createElement('button');btn.textContent=label;btn.onclick=fn;wrap.append(btn);}
+ refreshProjectControls();
+}
+
 // ---------- Bedienoberfläche ----------
 const TABS = {
   figur: { label: 'Figuren', items: [['figur:peter', '👤 PS Peter'], ['figur:baer', '🐻 PS Bär']] },
+  projekt: { label: 'Filmprojekt', items: [['projectEditor','']] },
   kulissen: { label: 'Kulissen', items: [['stage:park','🌳 Park'],['stage:wohnzimmer','🏠 Wohnzimmer'],['stage:stadt','🌃 Stadt am Abend'],['stage:buehne','🎤 Bühne']] },
   requisiten: { label: 'Gegenstände', items: [['propEditor','']] },
   video: { label: 'Musikvideo', items: [['vplay', ''], ['vjump:64', 'Zum Refrain'], ['vjump:140', 'Zur Pause & Drop'], ['vjump:176', 'Zum Finale'], ['vcam', 'Regie-Kamera'], ['vstop', 'Stopp'], ['vsong', 'Anderen Song wählen'], ['vnote', '']] },
@@ -1461,6 +1631,7 @@ function renderChips() {
   const c = $('#chips'); c.innerHTML = '';
   for (const [id, label] of TABS[tab].items) {
     if (id === 'propEditor') { buildPropControls(c); continue; }
+    if (id === 'projectEditor') { buildProjectControls(c); continue; }
     if (id === 'tempo') { const f = document.createElement('label'); f.className = 'field'; f.innerHTML = 'Tempo <input type="range" id="tempoIn" min="0.1" max="1.5" step="0.05"> <output id="tempoOut"></output>'; c.append(f); const i = f.querySelector('input'); i.value = tempo; f.querySelector('output').textContent = tempo.toFixed(2) + '×'; i.oninput = () => { tempo = +i.value; f.querySelector('output').textContent = tempo.toFixed(2) + '×'; }; continue; }
     if (id === 'q') { const b = chip('q', 'Qualität: ' + ['Niedrig', 'Mittel', 'Hoch'][quality]); c.append(b); continue; }
     if (id === 'vnote') { const n = document.createElement('span'); n.className = 'note'; n.textContent = '„EINS ZWEI DREI VIER“ · 152 BPM · Tänze auf den Schlag, Kamera-Schnitte nach Strophe, Refrain, Pause und Drop'; c.append(n); continue; }
