@@ -1,0 +1,214 @@
+{
+  "project": {
+    "app": "PS Cartoon Studio",
+    "version": 1,
+    "name": "Der KI-Mitbewohner",
+    "active": 0,
+    "scenes": [
+      {
+        "id": "szene_wohnzimmer",
+        "name": "Der KI-Mitbewohner",
+        "duration": 24,
+        "bg": {
+          "type": "preset",
+          "id": "wohnzimmer"
+        },
+        "camera": {
+          "x": 640,
+          "y": 360,
+          "zoom": 1
+        },
+        "actors": [
+          {
+            "id": "peter_1",
+            "name": "Peter",
+            "kind": "human",
+            "x": 170,
+            "y": 612,
+            "scale": 1,
+            "flip": false,
+            "look": {
+              "height": 1,
+              "build": 1,
+              "legs": 1,
+              "headSize": 1,
+              "headShape": "rund",
+              "skin": "#f1c6a1",
+              "hair": "kurz",
+              "hairColor": "#38291f",
+              "beard": "dreitage",
+              "eyeColor": "#4a7a54",
+              "nose": "klein",
+              "shirt": "hoodie",
+              "shirtColor": "#293b60",
+              "pantsColor": "#303747",
+              "shoeColor": "#292929",
+              "glasses": false,
+              "glassesColor": "#1d1d22",
+              "cap": false,
+              "capColor": "#c8453b"
+            },
+            "clips": [
+              {
+                "id": "p1",
+                "type": "gehen",
+                "start": 0,
+                "dur": 3,
+                "speed": 1,
+                "intensity": 1,
+                "toX": 570,
+                "toY": 612
+              },
+              {
+                "id": "p2",
+                "type": "winken",
+                "start": 3.1,
+                "dur": 1.5,
+                "speed": 1,
+                "intensity": 1
+              },
+              {
+                "id": "p3",
+                "type": "sitzen",
+                "start": 7,
+                "dur": 12,
+                "speed": 1,
+                "intensity": 1
+              },
+              {
+                "id": "p4",
+                "type": "sprechen",
+                "start": 8,
+                "dur": 4.4,
+                "speed": 1,
+                "intensity": 1
+              },
+              {
+                "id": "p5",
+                "type": "erschrecken",
+                "start": 18.2,
+                "dur": 1.4,
+                "speed": 1,
+                "intensity": 0.7
+              },
+              {
+                "id": "p6",
+                "type": "schuetteln",
+                "start": 20,
+                "dur": 1.5,
+                "speed": 1,
+                "intensity": 1
+              },
+              {
+                "id": "p7",
+                "type": "lachen",
+                "start": 21.5,
+                "dur": 2.3,
+                "speed": 1,
+                "intensity": 1
+              }
+            ]
+          },
+          {
+            "id": "ki_1",
+            "name": "KI-Mitbewohner",
+            "kind": "human",
+            "x": 1010,
+            "y": 612,
+            "scale": 1,
+            "flip": true,
+            "look": {
+              "height": 1,
+              "build": 0.9,
+              "legs": 1,
+              "headSize": 1.1,
+              "headShape": "oval",
+              "skin": "#e3b993",
+              "hair": "kurz",
+              "hairColor": "#24212d",
+              "beard": "keiner",
+              "eyeColor": "#518bb4",
+              "nose": "klein",
+              "shirt": "hoodie",
+              "shirtColor": "#248c88",
+              "pantsColor": "#383848",
+              "shoeColor": "#dddddd",
+              "glasses": true,
+              "glassesColor": "#22222a",
+              "cap": false,
+              "capColor": "#333333"
+            },
+            "clips": [
+              {
+                "id": "k1",
+                "type": "winken",
+                "start": 3.2,
+                "dur": 2,
+                "speed": 1,
+                "intensity": 1
+              },
+              {
+                "id": "k2",
+                "type": "zeigen",
+                "start": 5,
+                "dur": 2,
+                "speed": 1,
+                "intensity": 1
+              },
+              {
+                "id": "k3",
+                "type": "nicken",
+                "start": 9,
+                "dur": 2,
+                "speed": 1,
+                "intensity": 1
+              },
+              {
+                "id": "k4",
+                "type": "sprechen",
+                "start": 13,
+                "dur": 5,
+                "speed": 1,
+                "intensity": 1
+              },
+              {
+                "id": "k5",
+                "type": "lachen",
+                "start": 20,
+                "dur": 4,
+                "speed": 1,
+                "intensity": 1
+              }
+            ]
+          }
+        ],
+        "props": [
+          {
+            "id": "sofa_1",
+            "type": "sofa",
+            "x": 570,
+            "y": 612,
+            "scale": 1,
+            "rot": 0,
+            "flip": false,
+            "layer": "hinten",
+            "color": "#648b9a"
+          },
+          {
+            "id": "lampe_1",
+            "type": "lampe",
+            "x": 1150,
+            "y": 612,
+            "scale": 1,
+            "rot": 0,
+            "flip": false,
+            "layer": "hinten",
+            "color": "#eac174"
+          }
+        ],
+        "audio": []
+      }
+    ]
+  },
+  "assets": {}
+}
