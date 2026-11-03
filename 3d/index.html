@@ -92,6 +92,40 @@ button,input{font:inherit;color:inherit}
  #tlHint{font-size:10px}
 }
 
+
+/* Schritt 2: adaptive Studio-Bühne und große mobile Steuerung */
+#frameFormatTop{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:7px 9px;color:var(--text);font-size:12px;font-weight:700;max-width:135px}
+#mobileDock{display:none}
+#c{margin:0}
+@media(max-width:640px){
+ #top{gap:6px;padding:calc(7px + env(safe-area-inset-top,0px)) 8px 6px}
+ #top .brand{padding:4px 7px 4px 4px}
+ #top .logo{width:28px;height:28px;font-size:12px}
+ #top .bt b{font-size:13px}
+ #top #to2d{padding:5px 8px}
+ #top #timelineToggle,#top #frameFormatTop,#top #bPause,#top #status{display:none}
+ #panel{z-index:6;bottom:calc(7px + env(safe-area-inset-bottom,0px));width:calc(100% - 12px);border-radius:14px}
+ #tabs{padding:4px 4px 0;gap:2px;justify-content:flex-start}
+ #tabs .tab{min-width:77px;min-height:55px;font-size:12px;padding:10px 8px 8px;border-radius:9px 9px 0 0;border-bottom-width:3px}
+ #chips{display:none}
+ #panel.expanded #chips{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));max-height:min(34vh,250px);overflow-y:auto;overflow-x:hidden;gap:8px;padding:9px}
+ #panel.expanded .chip{width:100%;white-space:normal;min-height:48px;height:auto;padding:8px;text-align:center}
+ #panel.expanded .field,#panel.expanded .note{grid-column:1/-1;justify-content:center;max-width:none}
+ #mobileDock{position:fixed;z-index:6;left:50%;transform:translateX(-50%);bottom:calc(81px + env(safe-area-inset-bottom,0px));display:flex;gap:8px;align-items:center;justify-content:center;background:rgba(27,24,36,.93);padding:6px;border:1px solid var(--line);border-radius:16px;box-shadow:0 6px 18px #0006}
+ #mobileDock button,#mobileDock select{height:46px;min-width:70px;padding:6px 10px;border:1px solid var(--line);border-radius:11px;background:var(--panel2);color:var(--text);font-weight:700;font-size:13px}
+ #mobileDock button:active{background:var(--accent);color:var(--ink)}
+ #mobileDock select{min-width:92px;max-width:106px}
+ #timelineEditor{z-index:5;bottom:calc(145px + env(safe-area-inset-bottom,0px));max-height:42vh;overflow-y:auto;overscroll-behavior:contain}
+ #panel.expanded ~ #timelineEditor{bottom:calc(150px + env(safe-area-inset-bottom,0px))}
+ #hint{bottom:calc(148px + env(safe-area-inset-bottom,0px));max-width:90%;text-align:center}
+ #toast{z-index:20}
+}
+@media(max-width:390px){
+ #tabs .tab{min-width:70px}
+ #mobileDock{gap:5px}
+ #mobileDock button,#mobileDock select{min-width:62px;padding:5px 7px}
+}
+
 </style>
 </head>
 <body>
@@ -99,12 +133,24 @@ button,input{font:inherit;color:inherit}
 <div id="top">
   <div class="brand"><span class="logo">PS</span><div class="bt"><b>3D-Studio</b><span>Musikvideo · Toon-Shading · Skelett</span></div></div>
   <a id="to2d" href="../" title="Zum 2D-Studio">2D</a>
+  <select id="frameFormatTop" aria-label="Bühnenformat auswählen" title="Format der 3D-Vorschau">
+    <option value="auto">Bildschirm</option><option value="portrait">Hochkant 9:16</option><option value="landscape">Quer 16:9</option>
+  </select>
+
 <button id="timelineToggle" type="button" aria-controls="timelineEditor" aria-expanded="false">🎬 Zeitleiste</button>
   <div id="status">Stehen</div>
   <div class="spacer"></div>
   <div id="stats">– FPS</div>
   <button id="bPause" title="Pause / Weiter (Leertaste)" aria-label="Pause">❚❚</button>
 </div>
+<div id="mobileDock" role="group" aria-label="Schnellsteuerung">
+ <button id="mobilePause" type="button" aria-label="Pause oder Abspielen">❚❚ Pause</button>
+ <button id="mobileTimeline" type="button" aria-controls="timelineEditor">🎬 Film</button>
+ <select id="frameFormatMobile" aria-label="Bühnenformat">
+  <option value="auto">Auto</option><option value="portrait">9:16</option><option value="landscape">16:9</option>
+ </select>
+</div>
+
 <div id="hint">Ziehen = Kamera drehen · Mausrad oder zwei Finger = Zoom</div>
 <div id="toast" hidden></div>
 <section id="panel" aria-label="Steuerung">
@@ -1243,7 +1289,15 @@ const TABS = {
 let tab = 'video';
 function renderTabs() {
   const t = $('#tabs'); t.innerHTML = '';
-  for (const k in TABS) { const b = document.createElement('button'); b.className = 'tab' + (k === tab ? ' on' : ''); b.textContent = TABS[k].label; b.onclick = () => { tab = k; renderTabs(); renderChips(); }; t.append(b); }
+  for (const k in TABS) { const b = document.createElement('button'); b.className = 'tab' + (k === tab ? ' on' : ''); b.textContent = TABS[k].label; b.onclick = () => {
+    if (matchMedia('(max-width:640px)').matches) {
+      const panel = document.getElementById('panel');
+      const open = !(k === tab && panel.classList.contains('expanded'));
+      tab = k; panel.classList.toggle('expanded',open);
+      if (open && !document.getElementById('timelineEditor').hidden) tlOpen(false);
+    } else tab = k;
+    renderTabs();renderChips();
+  }; t.append(b); }
 }
 function renderChips() {
   const c = $('#chips'); c.innerHTML = '';
@@ -1295,7 +1349,7 @@ function stats() { $('#stats').textContent = fps + ' FPS · ' + renderer.info.re
 let toastT = 0; function toast(m) { const t = $('#toast'); t.textContent = m; t.hidden = false; t.style.opacity = 1; clearTimeout(toastT); toastT = setTimeout(() => { t.style.opacity = 0; setTimeout(() => t.hidden = true, 300); }, 2400); }
 let hintHidden = false; function hideHint() { if (hintHidden) return; hintHidden = true; $('#hint').style.opacity = 0; }
 setTimeout(hideHint, 9000);
-function setPaused(p) { paused = p; if (video.on && video.audio) { if (p) video.audio.pause(); else { video.audio.currentTime = video.t; video.audio.play().catch(() => {}); } } $('#bPause').textContent = p ? '▶' : '❚❚'; $('#bPause').setAttribute('aria-label', p ? 'Weiter' : 'Pause'); }
+function setPaused(p) { paused = p; if (video.on && video.audio) { if (p) video.audio.pause(); else { video.audio.currentTime = video.t; video.audio.play().catch(() => {}); } } $('#bPause').textContent = p ? '▶' : '❚❚'; $('#bPause').setAttribute('aria-label', p ? 'Weiter' : 'Pause'); document.getElementById('mobilePause').textContent = p ? '▶ Weiter' : '❚❚ Pause'; }
 $('#bPause').onclick = () => setPaused(!paused);
 addEventListener('keydown', e => { if (e.code === 'Space' && e.target.tagName !== 'INPUT') { e.preventDefault(); setPaused(!paused); } });
 // Stimme: Lautstärke und Klangfarbe steuern den Mund (einfache Lippensynchronisation)
@@ -1312,7 +1366,38 @@ $('#fVoice').addEventListener('change', e => {
   } catch (err) { toast('Diese Datei konnte nicht gelesen werden.'); }
 });
 function stopVoice() { if (voice.el) { voice.el.pause(); voice.el = null; } voice.on = false; voice.level = 0; refreshChips(); }
-function resize() { renderer.setPixelRatio(Math.min(PR[quality], window.devicePixelRatio || 1)); renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.fov = innerWidth < innerHeight ? 52 : 38; camera.updateProjectionMatrix(); }
+// Die Formatwahl ändert den echten Renderer-Ausschnitt, keine bloße CSS-Verzerrung.
+let frameMode='auto';
+try { const saved=localStorage.getItem('ps-3d-frame'); if(['auto','portrait','landscape'].includes(saved))frameMode=saved; }catch(_){}
+const formatSelectors=[document.getElementById('frameFormatTop'),document.getElementById('frameFormatMobile')];
+function setFrameMode(value){
+ if(!['auto','portrait','landscape'].includes(value))return;
+ frameMode=value;formatSelectors.forEach(el=>el.value=value);
+ try{localStorage.setItem('ps-3d-frame',value);}catch(_){}
+ resize();
+ toast(value==='portrait'?'3D-Vorschau: Hochkant 9:16 (Ziel 720×1280)':value==='landscape'?'3D-Vorschau: Quer 16:9':'3D-Vorschau: Bildschirmformat');
+}
+formatSelectors.forEach(el=>{el.value=frameMode;el.onchange=()=>setFrameMode(el.value);});
+function resize(){
+ renderer.setPixelRatio(Math.min(PR[quality],window.devicePixelRatio||1));
+ let w=innerWidth,h=innerHeight,x=0,y=0;
+ if(frameMode!=='auto'){
+   const aspect=frameMode==='portrait'?9/16:16/9;
+   const pad=matchMedia('(max-width:640px)').matches?{top:57,bottom:152}:{top:60,bottom:130};
+   const aw=Math.max(100,innerWidth-12),ah=Math.max(100,innerHeight-pad.top-pad.bottom);
+   w=Math.min(aw,ah*aspect);h=w/aspect;
+   x=Math.round((innerWidth-w)/2);y=Math.round(pad.top+(ah-h)/2);
+ }
+ canvas.style.left=x+'px';canvas.style.top=y+'px';canvas.style.right='auto';canvas.style.bottom='auto';
+ canvas.style.width=w+'px';canvas.style.height=h+'px';
+ renderer.setSize(Math.round(w),Math.round(h),false);
+ camera.aspect=w/h;camera.fov=w<h?52:38;camera.updateProjectionMatrix();
+}
+document.getElementById('mobilePause').onclick=()=>document.getElementById('bPause').click();
+document.getElementById('mobileTimeline').onclick=()=>{
+ if(document.getElementById('timelineEditor').hidden)document.getElementById('panel').classList.remove('expanded');
+ document.getElementById('timelineToggle').click();
+};
 addEventListener('resize', resize);
 resize(); renderTabs(); renderChips();
 playClip('idle', 0); char.position.set(0, 0, 0.6); yaw = 0.15;
