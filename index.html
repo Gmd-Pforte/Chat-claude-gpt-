@@ -249,7 +249,7 @@ details.grp summary{font:600 14px var(--display);cursor:pointer;margin-bottom:8p
 
 <script>
 'use strict';
-const APP_VERSION = '1.9';
+const APP_VERSION = '2.0';
 /* =====================================================================
    PS Cartoon Studio 1.0
    Aufbau:
@@ -1313,10 +1313,24 @@ async function importAudioFile(file) {
 const stage = $('#stage'), sctx = stage.getContext('2d');
 let view = { fit: 1, offX: 0, offY: 0, dpr: 1 }, rafPending = false;
 function requestRender() { if (playing || rafPending) return; rafPending = true; requestAnimationFrame(() => { rafPending = false; drawStage(); }); }
-function camOf(sc) { const c = sc.camera || { x: W / 2, y: H / 2, zoom: 1 }, z = clamp(c.zoom || 1, 1, 3); return { z, x: clamp(c.x, W / (2 * z), W - W / (2 * z)), y: clamp(c.y, H / (2 * z), H - H / (2 * z)) }; }
+// Videoformat: Querformat 1280×720 oder Hochkant 720×1280. Die Welt bleibt 1280×720, hochkant zeigt die Kamera einen 9:16-Ausschnitt.
+function outSize() { return project && project.format === 'hoch' ? { OW: 720, OH: 1280 } : { OW: W, OH: H }; }
+function camOf(sc, t) {
+  const c = sc.camera || { x: W / 2, y: H / 2, zoom: 1 }, z = clamp(c.zoom || 1, 1, 3), { OW, OH } = outSize(), s = z * OH / H, vw = OW / s, vh = OH / s;
+  let x = c.x;
+  if (c.follow && t != null) {
+    const a = sc.actors.find(a => a.id === c.follow);
+    if (a) { let sum = 0; const ds = [-0.5, -0.25, 0, 0.25, 0.5]; for (const d of ds) sum += evalActor(sc, a, clamp(t + d, 0, sc.duration)).x; x = sum / ds.length; }
+  }
+  return { z, s, OW, OH, x: clamp(x, vw / 2, W - vw / 2), y: clamp(c.y, vh / 2, H - vh / 2) };
+}
+function toggleFormat() {
+  project.format = project.format === 'hoch' ? 'quer' : 'hoch'; commit(); renderAll();
+  toast(project.format === 'hoch' ? 'Hochkant 9:16 – tipp ohne Auswahl auf „Bearbeiten“ für die Kamera' : 'Querformat 16:9');
+}
 function renderScene(c, sc, t, clean, k) {
-  const cam = camOf(sc), fx = fxOf(sc);
-  c.save(); c.translate(W / 2, H / 2); c.scale(cam.z, cam.z); c.translate(-cam.x, -cam.y);
+  const cam = camOf(sc, t), fx = fxOf(sc);
+  c.save(); c.translate(cam.OW / 2, cam.OH / 2); c.scale(cam.s, cam.s); c.translate(-cam.x, -cam.y);
   if (fx.shake) { let amp = 0; for (const a of sc.actors) for (const cl of a.clips) if (cl.type === 'erschrecken') { const d = t - cl.start; if (d >= 0 && d < 0.4) amp = Math.max(amp, 7 * (1 - d / 0.4) * (cl.intensity ?? 1)); }
     if (amp > 0) c.translate(Math.sin(t * 91) * amp, Math.cos(t * 73) * amp * 0.7); }
   drawBackground(c, sc.bg, k);
@@ -1332,10 +1346,10 @@ function renderScene(c, sc, t, clean, k) {
   const order = sc.actors.slice().sort((m, n) => (states.get(m.id).y - states.get(n.id).y) || (sc.actors.indexOf(m) - sc.actors.indexOf(n)));
   for (const a of order) { collecting = a.id === jointId; drawActor(c, a, states.get(a.id)); collecting = false; }
   for (const pr of sc.props) if (pr.layer === 'vorne') drawProp(c, pr);
-  if (!clean) { drawOverlay(c, sc, states, cam.z); lastStates = states; }
+  if (!clean) { drawOverlay(c, sc, states, cam.s); lastStates = states; }
   c.restore();
-  if (fx.vignette) { const g = c.createRadialGradient(W / 2, H / 2, H * 0.42, W / 2, H / 2, H * 0.98); g.addColorStop(0, 'rgba(20,10,30,0)'); g.addColorStop(1, 'rgba(20,10,30,.38)'); c.fillStyle = g; c.fillRect(0, 0, W, H); }
-  if (fx.fade && (clean || playing)) { const al = clamp(Math.max(1 - t / 0.45, 1 - (sc.duration - t) / 0.45), 0, 1); if (al > 0) { c.fillStyle = 'rgba(8,6,12,' + al + ')'; c.fillRect(0, 0, W, H); } }
+  if (fx.vignette) { const m = Math.min(cam.OW, cam.OH), M = Math.max(cam.OW, cam.OH), g = c.createRadialGradient(cam.OW / 2, cam.OH / 2, m * 0.42, cam.OW / 2, cam.OH / 2, M * 0.56); g.addColorStop(0, 'rgba(20,10,30,0)'); g.addColorStop(1, 'rgba(20,10,30,.38)'); c.fillStyle = g; c.fillRect(0, 0, cam.OW, cam.OH); }
+  if (fx.fade && (clean || playing)) { const al = clamp(Math.max(1 - t / 0.45, 1 - (sc.duration - t) / 0.45), 0, 1); if (al > 0) { c.fillStyle = 'rgba(8,6,12,' + al + ')'; c.fillRect(0, 0, cam.OW, cam.OH); } }
 }
 function drawOverlay(c, sc, states, z) {
   c.save(); c.lineWidth = 2 / z; c.setLineDash([7 / z, 5 / z]); c.strokeStyle = '#ffd166';
@@ -1368,19 +1382,19 @@ function drawStage() {
   const cw = stage.clientWidth, ch = stage.clientHeight; if (!cw || !ch) return;
   const dpr = Math.min(playing && isMobile() ? 1.5 : 2, window.devicePixelRatio || 1);
   if (stage.width !== Math.round(cw * dpr) || stage.height !== Math.round(ch * dpr)) { stage.width = Math.round(cw * dpr); stage.height = Math.round(ch * dpr); }
-  const pad = isMobile() ? 6 : 14, fit = Math.max(0.05, Math.min((cw - pad * 2) / W, (ch - pad * 2) / H));
-  view = { fit, offX: (cw - W * fit) / 2, offY: (ch - H * fit) / 2, dpr };
+  const { OW, OH } = outSize(), pad = isMobile() ? 6 : 14, fit = Math.max(0.02, Math.min((cw - pad * 2) / OW, (ch - pad * 2) / OH));
+  view = { fit, offX: (cw - OW * fit) / 2, offY: (ch - OH * fit) / 2, dpr };
   const c = sctx; c.setTransform(1, 0, 0, 1, 0, 0); c.fillStyle = '#0b0a10'; c.fillRect(0, 0, stage.width, stage.height);
   c.setTransform(dpr * fit, 0, 0, dpr * fit, dpr * view.offX, dpr * view.offY);
-  c.save(); c.beginPath(); c.rect(0, 0, W, H); c.clip(); JOINTS = [];
-  renderScene(c, scene(), time, false, fit * dpr * camOf(scene()).z > 1.15 ? 2 : 1);
+  c.save(); c.beginPath(); c.rect(0, 0, OW, OH); c.clip(); JOINTS = [];
+  renderScene(c, scene(), time, false, fit * dpr * camOf(scene(), time).s > 1.15 ? 2 : 1);
   c.restore();
-  c.strokeStyle = 'rgba(255,255,255,.14)'; c.lineWidth = 1 / fit; c.strokeRect(0, 0, W, H);
+  c.strokeStyle = 'rgba(255,255,255,.14)'; c.lineWidth = 1 / fit; c.strokeRect(0, 0, OW, OH);
   if (JOINTS.length) { c.setTransform(1, 0, 0, 1, 0, 0); for (const [x, y] of JOINTS) { c.beginPath(); c.arc(x, y, 3.6 * dpr, 0, TAU); c.fillStyle = '#4fd1c5'; c.fill(); c.lineWidth = 1.5 * dpr; c.strokeStyle = '#0b0a10'; c.stroke(); } }
 }
 function toWorld(e) {
-  const r = stage.getBoundingClientRect(), vx = (e.clientX - r.left - view.offX) / view.fit, vy = (e.clientY - r.top - view.offY) / view.fit, cam = camOf(scene());
-  return { x: (vx - W / 2) / cam.z + cam.x, y: (vy - H / 2) / cam.z + cam.y };
+  const r = stage.getBoundingClientRect(), vx = (e.clientX - r.left - view.offX) / view.fit, vy = (e.clientY - r.top - view.offY) / view.fit, cam = camOf(scene(), time);
+  return { x: (vx - cam.OW / 2) / cam.s + cam.x, y: (vy - cam.OH / 2) / cam.s + cam.y };
 }
 function hitTest(w) {
   for (const m of lastMarkers) if (Math.hypot(w.x - m.x, w.y - m.y) < m.r) return { kind: 'marker', clip: m.clip };
@@ -1733,9 +1747,10 @@ function renderProps() {
     const nm = !o ? 'Bearbeiten' : sel.kind === 'actor' ? o.name : sel.kind === 'clip' ? (ANIMS[o.type] || {}).label : sel.kind === 'prop' ? PROPS[o.type].label : 'Audio';
     $('#mbProps .lbl').textContent = nm || 'Bearbeiten'; $('#mbProps').classList.toggle('has', !!o); }
   if (!sel) {
+    p.append(group('Videoformat', [ctlSelect('Format', project, 'format', [['quer', 'Querformat 16:9 (YouTube)'], ['hoch', 'Hochkant 9:16 (TikTok, Reels, Shorts)']], { onChange: () => { if (!project.format) project.format = 'quer'; renderAll(); } })]));
     p.append(title(sc.name, 'Szene'), ctlText('Szenenname', sc, 'name'),
       ctlRange('Dauer', sc, 'duration', 1, Math.max(60, Math.ceil(sc.duration)), 0.5, { unit: ' s', onInput: () => { time = Math.min(time, sc.duration); renderTimeline(); } }),
-      group('Kamera', [ctlRange('Zoom', sc.camera, 'zoom', 1, 3, 0.05, { unit: '×' }), ctlRange('Ausschnitt links/rechts', sc.camera, 'x', 0, W, 1), ctlRange('Ausschnitt oben/unten', sc.camera, 'y', 0, H, 1),
+      group('Kamera', [ctlSelect('Kamera folgt', sc.camera, 'follow', [['', 'Niemandem (feste Kamera)'], ...sc.actors.map(a => [a.id, a.name])]), ctlRange('Zoom', sc.camera, 'zoom', 1, 3, 0.05, { unit: '×' }), ctlRange('Ausschnitt links/rechts', sc.camera, 'x', 0, W, 1), ctlRange('Ausschnitt oben/unten', sc.camera, 'y', 0, H, 1),
         btnRow([['Kamera zurücksetzen', () => { sc.camera = { x: W / 2, y: H / 2, zoom: 1 }; commit(); renderProps(); requestRender(); }]])]),
       group('Zeichentrick-Effekte', [(sc.fx = fxOf(sc), ctlCheck('Vignette (dunkle Bildränder)', sc.fx, 'vignette')), ctlCheck('Ein- und Ausblenden', sc.fx, 'fade'), ctlCheck('Kamerawackeln beim Erschrecken', sc.fx, 'shake'),
         el('p', 'hint', 'Das Ein- und Ausblenden siehst du beim Abspielen und im Video. Beim Bearbeiten bleibt das Bild hell.')]),
@@ -1827,7 +1842,7 @@ async function loadData(data) {
   if (!data || !data.project || !Array.isArray(data.project.scenes) || !data.project.scenes.length) throw new Error('Ungültiges Projekt');
   project = data.project; assets = data.assets || {}; audioCache = {}; imageCache = {}; sel = null; time = 0;
   project.scenes.forEach(s => { s.camera = s.camera || { x: W / 2, y: H / 2, zoom: 1 }; s.audio = s.audio || []; s.props = s.props || []; s.actors = s.actors || []; s.bg = s.bg || { type: 'preset', id: 'wohnzimmer' }; s.fx = fxOf(s); s.actors.forEach(a => { if (a.look.beard === 'keins') a.look.beard = 'keiner'; if (a.look.eyeSize == null) a.look.eyeSize = 1; }); });
-  project.active = clamp(project.active || 0, 0, project.scenes.length - 1);
+  project.active = clamp(project.active || 0, 0, project.scenes.length - 1); project.format = project.format === 'hoch' ? 'hoch' : 'quer';
   resetHistory(); renderAll();
   const ids = Object.keys(assets).filter(id => assets[id].type === 'audio');
   await Promise.all(ids.map(id => decodeAsset(id).catch(e => console.warn('Audio konnte nicht dekodiert werden', id, e))));
@@ -1836,13 +1851,13 @@ async function loadData(data) {
 function download(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000); }
 const fileBase = () => (project.name || 'cartoon').replace(/[^\wäöüÄÖÜß\- ]+/g, '').trim().replace(/\s+/g, '-') || 'cartoon';
 function exportJSON() { const blob = new Blob([JSON.stringify(Object.assign({ app: 'PS Cartoon Studio', version: 1 }, bundle()))], { type: 'application/json' }); download(blob, fileBase() + '.json'); toast('Projektdatei wird heruntergeladen'); }
-function exportPNG() { const cv = document.createElement('canvas'); cv.width = W; cv.height = H; renderScene(cv.getContext('2d'), scene(), time, true); cv.toBlob(b => { download(b, fileBase() + '-szene' + (project.active + 1) + '.png'); toast('Bild wird heruntergeladen'); }, 'image/png'); }
+function exportPNG() { const { OW, OH } = outSize(), cv = document.createElement('canvas'); cv.width = OW; cv.height = OH; renderScene(cv.getContext('2d'), scene(), time, true); cv.toBlob(b => { download(b, fileBase() + '-szene' + (project.active + 1) + '.png'); toast('Bild wird heruntergeladen'); }, 'image/png'); }
 let recCanvas = null, recCtx = null;
 function renderExportFrame() { recCtx.setTransform(1, 0, 0, 1, 0, 0); renderScene(recCtx, scene(), time, true); }
 async function exportVideoRealtime() {
   if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) { toast('Dein Browser kann keine Videos aufnehmen. Bitte Chrome, Edge oder Firefox verwenden.'); return; }
   pause(); const ac = getAC(); await ac.resume();
-  recCanvas = document.createElement('canvas'); recCanvas.width = W; recCanvas.height = H; recCtx = recCanvas.getContext('2d');
+  recCanvas = document.createElement('canvas'); recCanvas.width = outSize().OW; recCanvas.height = outSize().OH; recCtx = recCanvas.getContext('2d');
   const startScene = ui.film ? 0 : project.active; project.active = startScene; time = 0; sel = null; renderAll(); renderExportFrame();
   const vs = recCanvas.captureStream(30), dest = ac.createMediaStreamDestination(); master.connect(dest);
   const stream = new MediaStream([...vs.getVideoTracks(), ...dest.stream.getAudioTracks()]);
@@ -1949,7 +1964,7 @@ async function mixAudio(scenes) {
 }
 
 async function exportMP4File(scenes, onProgress, isCancelled) {
-  const FPS = 30, vcfg = await MP4.pickVideoConfig(W, H, FPS); if (!vcfg) return null;
+  const FPS = 30, { OW, OH } = outSize(), vcfg = await MP4.pickVideoConfig(OW, OH, FPS); if (!vcfg) return null;
   const mix = await mixAudio(scenes); let acfg = null;
   if (mix) { acfg = await MP4.pickAudioConfig(); if (!acfg) return null; }
   let err = null;
@@ -1971,7 +1986,7 @@ async function exportMP4File(scenes, onProgress, isCancelled) {
     audio = { chunks, durs, sr: mix.SR, ch: 2, codec: acfg.codec === 'opus' ? 'opus' : 'aac', asc: asc || new Uint8Array([0x11, 0x90]) };
   }
   // Video Bild für Bild
-  const cv = document.createElement('canvas'); cv.width = W; cv.height = H; const ctx = cv.getContext('2d');
+  const cv = document.createElement('canvas'); cv.width = OW; cv.height = OH; const ctx = cv.getContext('2d');
   const vChunks = [], keys = []; let avcC = null;
   const venc = new VideoEncoder({ output: (ch, meta) => { if (!avcC && meta && meta.decoderConfig && meta.decoderConfig.description) avcC = MP4.bytes(meta.decoderConfig.description); const b = new Uint8Array(ch.byteLength); ch.copyTo(b); vChunks.push(b); keys.push(ch.type === 'key'); }, error: e => err = e });
   venc.configure(vcfg);
@@ -1991,14 +2006,14 @@ async function exportMP4File(scenes, onProgress, isCancelled) {
   await venc.flush(); venc.close(); if (err) throw err;
   if (!avcC) throw new Error('Kein H.264-Header vom Encoder');
   onProgress(1);
-  return MP4.build({ chunks: vChunks, keys, fps: FPS, w: W, h: H, avcC }, audio);
+  return MP4.build({ chunks: vChunks, keys, fps: FPS, w: OW, h: OH, avcC }, audio);
 }
 
 async function exportVideo() {
   pause();
   const scenes = ui.film ? project.scenes.slice() : [scene()];
   const total = scenes.reduce((s, x) => s + x.duration, 0);
-  const vOK = await MP4.pickVideoConfig(W, H, 30);
+  const vOK = await MP4.pickVideoConfig(outSize().OW, outSize().OH, 30);
   if (!vOK) { exportVideoRealtime(); return; }
   let cancelled = false;
   const body = el('div'); body.append(el('p', '', 'Das Video wird Bild für Bild berechnet (' + fmtT(total) + ', 30 Bilder pro Sekunde). Lass diese Seite geöffnet.'));
@@ -2010,7 +2025,7 @@ async function exportVideo() {
     closeModal();
     if (res === 'cancel') { toast('Video abgebrochen'); return; }
     if (!res) { toast('MP4 nicht möglich – nehme stattdessen in Echtzeit auf'); exportVideoRealtime(); return; }
-    download(res, fileBase() + '.mp4'); toast('Video fertig (MP4, ' + (res.size / 1048576).toFixed(1) + ' MB) – wird heruntergeladen');
+    download(res, fileBase() + (project.format === 'hoch' ? '-hochkant' : '') + '.mp4'); toast('Video fertig (MP4, ' + (res.size / 1048576).toFixed(1) + ' MB) – wird heruntergeladen');
   } catch (e) { console.error(e); closeModal(); toast('MP4-Erstellung fehlgeschlagen – nehme stattdessen in Echtzeit auf'); exportVideoRealtime(); }
 }
 
@@ -2029,7 +2044,7 @@ $('#bExport').addEventListener('click', e => {
   const r = e.currentTarget.getBoundingClientRect();
   showMenu(r.left, r.bottom + 6, fileItems());
 });
-function fileItems() { return [{ label: 'Projekt als JSON speichern', fn: exportJSON }, { label: 'JSON-Projekt öffnen …', fn: () => $('#fJson').click() }, '-',
+function fileItems() { return [{ label: project.format === 'hoch' ? 'Format: Querformat 16:9' : 'Format: Hochkant 9:16 (TikTok, Reels)', fn: toggleFormat }, '-', { label: 'Projekt als JSON speichern', fn: exportJSON }, { label: 'JSON-Projekt öffnen …', fn: () => $('#fJson').click() }, '-',
     { label: 'Aktuelles Bild als PNG', fn: exportPNG }, { label: ui.film ? 'Ganzen Film als Video aufnehmen' : 'Szene als Video aufnehmen', fn: exportVideo }, '-',
     { label: 'Beispielprojekt laden', fn: () => showModal('Beispielprojekt laden?', 'Das aktuelle Projekt wird ersetzt. Speichere es vorher, wenn du es behalten möchtest.', [{ label: 'Abbrechen' }, { label: 'Beispiel laden', primary: true, fn: () => loadData(exampleProject()) }]) },
     { label: 'Neues leeres Projekt', fn: () => showModal('Neues Projekt anlegen?', 'Das aktuelle Projekt wird ersetzt. Speichere es vorher, wenn du es behalten möchtest.', [{ label: 'Abbrechen' }, { label: 'Neu anlegen', primary: true, fn: () => loadData(blankProject()) }]) }]; }
