@@ -126,6 +126,17 @@ button,input{font:inherit;color:inherit}
  #mobileDock button,#mobileDock select{min-width:62px;padding:5px 7px}
 }
 
+
+/* Kulissen- und Requisiten-Editor */
+.propControls{display:flex;align-items:center;gap:7px;flex-wrap:wrap;max-height:170px;overflow-y:auto}
+.propControls select,.propControls button{font:600 13px var(--body);color:var(--text);border:1px solid var(--line);background:var(--panel2);border-radius:9px;padding:9px;min-height:40px}
+.propControls select{max-width:172px}.propControls button{cursor:pointer;min-width:40px}.propControls button:disabled{opacity:.38}
+.propControls span{color:var(--mute);font-size:11px}
+@media(max-width:640px){#panel.expanded .propControls{grid-column:1/-1;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));max-height:none}
+#panel.expanded .propControls select{grid-column:span 2;max-width:none;min-width:0}
+#panel.expanded .propControls button{min-width:0}
+#panel.expanded .propControls span{grid-column:1/-1}}
+
 </style>
 </head>
 <body>
@@ -283,6 +294,151 @@ const BENCH = { pos: new T.Vector3(2.7, 0, -1.7), yaw: -0.55 };
 const shadowTex = canvasTex(128, 128, (g, w) => { const r = g.createRadialGradient(w / 2, w / 2, 4, w / 2, w / 2, w / 2); r.addColorStop(0, 'rgba(20,10,30,.42)'); r.addColorStop(1, 'rgba(20,10,30,0)'); g.fillStyle = r; g.fillRect(0, 0, w, w); });
 const blob = new T.Mesh(new T.PlaneGeometry(1, 1), new T.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false }));
 blob.rotation.x = -Math.PI / 2; blob.position.y = 0.008; scene.add(blob);
+
+
+// ---------- 3D-Kulissen und frei bearbeitbare Requisiten ----------
+const stageGroups={}, propsRoot=new T.Group();scene.add(propsRoot);
+let stageName='park', activeProp=null, propSerial=0;
+const stageNames={park:'Park',wohnzimmer:'Wohnzimmer',stadt:'Stadt am Abend',buehne:'Bühne'};
+const propNames={sofa:'Sofa',tisch:'Tisch',stuhl:'Stuhl',pflanze:'Pflanze',lampe:'Stehlampe',mikrofon:'Mikrofon',lautsprecher:'Lautsprecher',discokugel:'Discokugel',bank:'Parkbank'};
+function stagePiece(group,geo,color,pos,scale,rot,outline){
+ return part(group,geo,color,pos,scale,rot,outline==null?.015:outline);
+}
+function stageBox(g,c,p,s){return stagePiece(g,BOX,c,p,s,null,.01);}
+function newStage(name,floor){
+ const g=new T.Group();scene.add(g);stageGroups[name]=g;
+ const f=new T.Mesh(new T.PlaneGeometry(40,40),toon(floor));f.rotation.x=-Math.PI/2;f.position.y=-.02;g.add(f);return g;
+}
+{
+ const g=newStage('wohnzimmer','#a88465');
+ stageBox(g,'#e5d3b5',[0,3,-6],[16,6,.12]);
+ stageBox(g,'#d9bd9c',[-8,3,0],[.12,6,12]);
+ stageBox(g,'#805f4e',[0,.02,-1.5],[4,.025,3]);
+ stageBox(g,'#9bcee4',[-2.8,3.2,-5.9],[2.2,2.0,.08]);
+ stageBox(g,'#eee9de',[-2.8,3.2,-5.81],[.10,2.08,.09]);
+ stageBox(g,'#eee9de',[-2.8,3.2,-5.79],[2.3,.10,.09]);
+ stageBox(g,'#eee9de',[-2.8,3.2,-5.78],[.1,2.0,.11]);
+ stageBox(g,'#eee9de',[-2.8,3.2,-5.77],[2.2,.08,.1]);
+ stageBox(g,'#dec4a4',[2.8,1.7,-5.8],[1.6,2.9,.1]);
+}
+{
+ const g=newStage('stadt','#343840');
+ for(let i=0;i<12;i++){
+   const x=(i%6-2.5)*3.7,z=i<6?-8:-14,h=3+(i*7%6);
+   stageBox(g,i%3===0?'#485268':'#394359',[x,h/2,z],[2.8,h,1.7]);
+   for(let y=1.4;y<h-.2;y+=1.05)for(let dx of [-.7,.7])
+     stageBox(g,(i+y)%3>1?'#ffdf8b':'#738ba6',[x+dx,y,z+.9],[.46,.48,.035]);
+ }
+ stageBox(g,'#a0a1a4',[0,.012,0],[12,.022,2.3]);
+ for(let x=-5;x<6;x+=2)stageBox(g,'#e4d9ac',[x,.025,0],[.85,.02,.08]);
+}
+{
+ const g=newStage('buehne','#1b1a27');
+ stageBox(g,'#38313c',[0,.14,-1.25],[6.4,.28,4.0]);
+ stageBox(g,'#3e2445',[0,2.7,-4.6],[8.0,5.3,.13]);
+ for(const x of [-3.2,3.2]){
+   stageBox(g,'#641e54',[x,2.7,-4.42],[.8,5.3,.16]);
+   stagePiece(g,new T.CylinderGeometry(.13,.2,.7,12),'#f5e5bf',[x,4.8,-3.3],null,null,.01);
+ }
+ stageBox(g,'#282734',[0,5.4,-3.9],[7.6,.32,.38]);
+}
+function buildProp(type){
+ const g=new T.Group(), Bx=(c,p,s)=>stagePiece(g,BOX,c,p,s,null,.008),
+ Cy=(r1,r2,h,c,p)=>stagePiece(g,new T.CylinderGeometry(r1,r2,h,12),c,p,null,null,.006),
+ Sp=(c,p,s)=>stagePiece(g,SPH,c,p,s,null,.006);
+ const dark='#2a2a32',metal='#777887',wood='#956d4b';
+ if(type==='sofa'){
+   Bx('#5a7e91',[0,.29,0],[1.45,.48,.60]);Bx('#527082',[0,.66,-.23],[1.53,.67,.22]);
+   for(const x of [-.68,.68])Bx('#527082',[x,.43,0],[.2,.57,.65]);
+   for(const x of [-.34,.34])Bx('#86a5b6',[x,.55,.10],[.56,.12,.39]);
+ }else if(type==='tisch'){
+   Bx(wood,[0,.68,0],[1.14,.09,.72]);
+   for(const x of [-.45,.45])for(const z of [-.27,.27])Bx(dark,[x,.33,z],[.07,.65,.07]);
+ }else if(type==='stuhl'){
+   Bx(wood,[0,.54,0],[.52,.10,.51]);Bx(wood,[0,.95,-.22],[.53,.82,.09]);
+   for(const x of [-.2,.2])for(const z of [-.2,.2])Bx(dark,[x,.25,z],[.06,.48,.06]);
+ }else if(type==='pflanze'){
+   Cy(.25,.18,.35,'#b66f4d',[0,.2,0]);Cy(.08,.12,.6,'#568749',[0,.67,0]);
+   for(const [x,z] of [[-.2,0],[.2,0],[0,.2],[0,-.2]])Sp('#3d965d',[x,.95,z],[.28,.34,.21]);
+ }else if(type==='lampe'){
+   Cy(.18,.2,.06,dark,[0,.03,0]);Cy(.035,.035,1.6,metal,[0,.85,0]);
+   stagePiece(g,new T.ConeGeometry(.34,.48,20),'#f5e5be',[0,1.75,0],null,null,.008);
+ }else if(type==='mikrofon'){
+   Cy(.22,.22,.04,dark,[0,.02,0]);Cy(.023,.023,1.48,metal,[0,.76,0]);
+   Sp('#30323a',[0,1.55,0],[.075,.12,.07]);
+ }else if(type==='lautsprecher'){
+   Bx('#22232d',[0,.55,0],[.66,1.12,.42]);
+   for(const [y,r] of [[.33,.2],[.83,.11]]){
+     stagePiece(g,new T.CylinderGeometry(r,r,.035,24),'#5d6170',[0,y,.225],[1,1,1],[Math.PI/2,0,0],.004);
+     Sp(dark,[0,y,.25],[r*.45,r*.45,.03]);
+   }
+ }else if(type==='discokugel'){
+   Cy(.028,.028,1.0,metal,[0,2.1,0]);Sp('#bbc6d8',[0,1.5,0],[.34,.34,.34]);
+   for(let i=0;i<12;i++){const a=i*Math.PI/6;Sp(i%2?'#75d8fb':'#f2a6dc',[Math.cos(a)*.3,1.5,Math.sin(a)*.3],[.07,.07,.06]);}
+ }else if(type==='bank'){
+   for(const z of [-.1,0,.1])Bx(wood,[0,.45,z],[1.35,.07,.09]);
+   Bx(wood,[0,.76,-.2],[1.35,.4,.09]);
+   for(const x of [-.55,.55])Bx(dark,[x,.23,0],[.065,.45,.45]);
+ }
+ return g;
+}
+const props=[];
+function addSceneProp(type,x,z){
+ if(!propNames[type])return;
+ const obj=buildProp(type),id=++propSerial;
+ obj.position.set(x==null?1.2:x,0,z==null?0:z);propsRoot.add(obj);
+ const p={id,type,stage:stageName,obj};props.push(p);activeProp=id;
+ showStageProps();renderChips();toast(propNames[type]+' eingefügt');
+}
+function showStageProps(){
+ props.forEach(p=>p.obj.visible=p.stage===stageName);
+ if(!props.some(p=>p.id===activeProp&&p.stage===stageName))activeProp=null;
+}
+function setStage(name){
+ if(!stageNames[name])return;
+ stageName=name;world.visible=name==='park';
+ Object.entries(stageGroups).forEach(([k,v])=>v.visible=k===name);
+ SKY.set(name==='stadt'?'#1c2742':name==='wohnzimmer'?'#c9b4a7':name==='buehne'?'#252139':'#a7dcff');
+ scene.background=SKY;scene.fog.color.copy(SKY);
+ showStageProps();renderChips();toast('Kulisse: '+stageNames[name]);
+}
+function moveSceneProp(operation){
+ const p=props.find(x=>x.id===activeProp&&x.stage===stageName);if(!p)return;
+ if(operation==='left')p.obj.position.x-=.2;
+ if(operation==='right')p.obj.position.x+=.2;
+ if(operation==='forward')p.obj.position.z+=.2;
+ if(operation==='back')p.obj.position.z-=.2;
+ if(operation==='rotateL')p.obj.rotation.y-=Math.PI/12;
+ if(operation==='rotateR')p.obj.rotation.y+=Math.PI/12;
+ if(operation==='grow')p.obj.scale.multiplyScalar(1.1);
+ if(operation==='shrink')p.obj.scale.multiplyScalar(1/1.1);
+ p.obj.scale.clampScalar(.2,4);
+ if(operation==='delete'){
+   p.obj.parent.remove(p.obj);
+   const index=props.indexOf(p);props.splice(index,1);activeProp=null;
+ }
+ renderChips();
+}
+function buildPropControls(container){
+ const wrap=document.createElement('div');wrap.className='propControls';container.append(wrap);
+ const addSelect=document.createElement('select');
+ for(const [id,name] of Object.entries(propNames)){const o=document.createElement('option');o.value=id;o.textContent=name;addSelect.append(o);}
+ wrap.append(addSelect);
+ const add=document.createElement('button');add.textContent='+ Hinzufügen';add.onclick=()=>addSceneProp(addSelect.value);wrap.append(add);
+ const choose=document.createElement('select'),none=document.createElement('option');none.value='';none.textContent='Gegenstand auswählen';choose.append(none);
+ props.filter(p=>p.stage===stageName).forEach(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=propNames[p.type]+' #'+p.id;choose.append(o);});
+ choose.value=activeProp||'';choose.onchange=()=>{activeProp=Number(choose.value)||null;renderChips();};wrap.append(choose);
+ const controls=[
+   ['←','left'],['→','right'],['↑','back'],['↓','forward'],
+   ['↶','rotateL'],['↷','rotateR'],['−','shrink'],['+','grow'],['Löschen','delete']
+ ];
+ for(const [label,id] of controls){
+   const button=document.createElement('button');button.textContent=label;button.title=id;
+   button.disabled=!activeProp;button.onclick=()=>moveSceneProp(id);wrap.append(button);
+ }
+ const note=document.createElement('span');note.textContent='Schritte: 20 cm · Drehen: 15° · Größe: 10 %';wrap.append(note);
+}
+for(const [name,g] of Object.entries(stageGroups))g.visible=false;
 
 // ---------- Peter aus seinen Modellblättern ----------
 // Formen: Querschnitte aus Vorder- und Seitenansicht (Superellipsen), Farben: Projektion der Zeichnungen (vorne/seitlich/hinten).
@@ -1279,6 +1435,8 @@ tlTrack.addEventListener('pointerdown',e=>{
 // ---------- Bedienoberfläche ----------
 const TABS = {
   figur: { label: 'Figuren', items: [['figur:peter', '👤 PS Peter'], ['figur:baer', '🐻 PS Bär']] },
+  kulissen: { label: 'Kulissen', items: [['stage:park','🌳 Park'],['stage:wohnzimmer','🏠 Wohnzimmer'],['stage:stadt','🌃 Stadt am Abend'],['stage:buehne','🎤 Bühne']] },
+  requisiten: { label: 'Gegenstände', items: [['propEditor','']] },
   video: { label: 'Musikvideo', items: [['vplay', ''], ['vjump:64', 'Zum Refrain'], ['vjump:140', 'Zur Pause & Drop'], ['vjump:176', 'Zum Finale'], ['vcam', 'Regie-Kamera'], ['vstop', 'Stopp'], ['vsong', 'Anderen Song wählen'], ['vnote', '']] },
   bewegung: { label: 'Bewegung', items: [['stehen', 'Stehen'], ['gehen', 'Gehen'], ['laufen', 'Laufen'], ['drehen180', 'Drehen 180°'], ['drehen360', 'Drehen 360°'], ['bank', 'Zur Bank & hinsetzen'], ['aufstehen', 'Aufstehen']] },
   gesten: { label: 'Gesten', items: Object.keys(GESTURES).map(k => ['g:' + k, GESTURES[k].label]) },
@@ -1302,6 +1460,7 @@ function renderTabs() {
 function renderChips() {
   const c = $('#chips'); c.innerHTML = '';
   for (const [id, label] of TABS[tab].items) {
+    if (id === 'propEditor') { buildPropControls(c); continue; }
     if (id === 'tempo') { const f = document.createElement('label'); f.className = 'field'; f.innerHTML = 'Tempo <input type="range" id="tempoIn" min="0.1" max="1.5" step="0.05"> <output id="tempoOut"></output>'; c.append(f); const i = f.querySelector('input'); i.value = tempo; f.querySelector('output').textContent = tempo.toFixed(2) + '×'; i.oninput = () => { tempo = +i.value; f.querySelector('output').textContent = tempo.toFixed(2) + '×'; }; continue; }
     if (id === 'q') { const b = chip('q', 'Qualität: ' + ['Niedrig', 'Mittel', 'Hoch'][quality]); c.append(b); continue; }
     if (id === 'vnote') { const n = document.createElement('span'); n.className = 'note'; n.textContent = '„EINS ZWEI DREI VIER“ · 152 BPM · Tänze auf den Schlag, Kamera-Schnitte nach Strophe, Refrain, Pause und Drop'; c.append(n); continue; }
@@ -1315,12 +1474,13 @@ function refreshChips() {
   document.querySelectorAll('.chip').forEach(b => {
     const id = b.dataset.id; let on = false;
     if (id === 'stehen') on = mode === 'Stehen'; else if (id === 'gehen') on = mode === 'Gehen'; else if (id === 'laufen') on = mode === 'Laufen';
-    else if (id === 'bank') { on = mode === 'Zur Bank'; b.disabled = seated; } else if (id === 'aufstehen') b.disabled = !seated;
+    else if (id === 'bank') { on = mode === 'Zur Bank'; b.disabled = seated || stageName!=='park'; } else if (id === 'aufstehen') b.disabled = !seated;
     else if (id.startsWith('g:')) on = !!gesture && gesture.name === id.slice(2);
     else if (id.startsWith('e:')) on = exprName === id.slice(2);
     else if (id.startsWith('c:')) on = camMode === id.slice(2);
     else if (id === 'vplay') { on = video.on; b.textContent = video.on ? '↺ Von vorne' : '▶ Musikvideo starten'; } else if (id === 'vstop') b.disabled = !video.on; else if (id === 'vcam') { on = camMode === 'video'; b.disabled = !video.on; }
     else if (id.startsWith('figur:')) on = studioCharacter === id.slice(6);
+    else if (id.startsWith('stage:')) on = stageName === id.slice(6);
     else if (id === 'skel') on = skelHelper.visible; else if (id === 'lookcam') on = lookCam; else if (id === 'voice') { on = voice.on; b.textContent = voice.on ? 'Stimme stoppen' : 'Stimme laden (MP3/WAV)'; }
     b.classList.toggle('on', on);
   });
@@ -1332,6 +1492,7 @@ function act(id) {
   if (id === 'vcam') { camMode = 'video'; video.seg = -1; refreshChips(); return; }
   if (id.startsWith('vjump:')) { const at = snapB(+id.slice(6)); if (!needSong(at)) startVideo(at); return; }
   if (video.on && TABS.bewegung.items.some(x => x[0] === id)) stopVideo();
+  if (id.startsWith('stage:')) { setStage(id.slice(6)); return; }
   if (id.startsWith('figur:')) { chooseCharacter(id.slice(6)); return; }
   if (id.startsWith('g:')) playGesture(id.slice(2));
   else if (id.startsWith('e:')) exprName = id.slice(2);
