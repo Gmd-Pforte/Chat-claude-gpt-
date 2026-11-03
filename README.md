@@ -8,7 +8,7 @@ Läuft am PC, Tablet und Handy. Keine Anmeldung, keine Cloud, keine kostenpflich
 
 ## Funktionen
 
-- Figuren mit Gelenken: per Code gezeichnete Figuren (Mensch, Bär) mit Editor sowie **gezeichnete Cut-out-Figuren** aus eigenen Teilebögen: **PS Peter**, **PS Bär**, **Sunny**, **Tom**, **KI-Mitbewohner** und **Freuerbeatz** (Adler). PS Peter und PS Bär drehen sich beim Gehen und Reden automatisch ins Halbprofil (eigener Teilebogen `teilebogen-schraeg.png`)
+- Figuren mit Gelenken: per Code gezeichnete Figuren (Mensch, Bär) mit Editor sowie **gezeichnete Cut-out-Figuren** aus eigenen Teilebögen: **PS Peter**, **PS Bär**, **Sunny**, **Tom**, **KI-Mitbewohner** **Freuerbeatz** (Adler) und **PS Peter 3D**. PS Peter und PS Bär drehen sich beim Gehen und Reden automatisch ins Halbprofil (eigener Teilebogen `teilebogen-schraeg.png`)
 - 15 Animationen, darunter Gehen, Laufen, Tanzen, Disco, Hüpfen, Jubeln, Klatschen, Winken, Zeigen, Sprechen, Lachen, Weinen, Erschrecken, Sitzen und eigene Posen
 - Zeitleiste mit Spuren pro Figur, verschiebbaren Blöcken, Audiospuren und mehreren Szenen
 - Audio-Import (MP3/WAV, z. B. aus ElevenLabs oder Suno) mit automatischer Mundbewegung
