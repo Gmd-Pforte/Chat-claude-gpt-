@@ -31,3 +31,14 @@ Läuft am PC, Tablet und Handy. Keine Anmeldung, keine Cloud, keine kostenpflich
 3. Claude schneidet die Teile aus, setzt die Gelenkpunkte und trägt die Figur im Studio ein.
 
 Die Wiedergabe erfolgt über GitHub Pages (`.github/workflows/static.yml`), sobald Änderungen auf `main` landen.
+
+## 3D-Studio (Beta)
+
+Unter **/3d/** (oder über den Knopf **3D** im Studio) läuft das 3D-Studio mit Three.js:
+
+- **PS Peter 3D**: aus den Modellblättern in `figuren/ps-peter-3d/` gebaut (Formen aus den Umrissen, Farben aus den Zeichnungen projiziert), mit Skelett, Skinning, Toon-Shading und beweglichem Gesicht
+- Gehen und Laufen mit Fuß-IK, Drehen, Hinsetzen, Gesten, Gesichtsausdrücke, Stimme mit Mundbewegung, frei drehbare Kamera
+- **Musikvideo** zu „EINS ZWEI DREI VIER“: Tänze im Takt (152 BPM), Party-Bühne, Kamera-Schnitte nach Songteilen. Der Song liegt nicht im Repo; er wird beim ersten Start ausgewählt und im Browser gemerkt.
+- `3d/three.min.js` ist Three.js r128 (MIT-Lizenz), lokal mitgeliefert, damit das Studio auch offline läuft.
+
+Neue 3D-Figuren brauchen ein Modellblatt (Vorder-, Seiten- und Rückansicht in T-Pose) und ein Kopf-Detailblatt auf grünem Hintergrund.

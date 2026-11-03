@@ -192,6 +192,7 @@ details.grp summary{font:600 14px var(--display);cursor:pointer;margin-bottom:8p
       <button class="btn ico" id="bRedo" title="Wiederholen (Strg+Y)" aria-label="Wiederholen">↷</button>
       <button class="btn" id="bSave" title="Projekt im Browser speichern">Speichern</button>
       <button class="btn" id="bOpen" title="Gespeicherte Projekte öffnen">Öffnen</button>
+      <a class="btn" href="3d/" title="3D-Studio (Beta)" style="text-decoration:none">3D</a>
       <button class="btn" id="bExport" title="Export, Import, Video">Datei ▾</button>
       <button class="btn mob" id="bLib">Bibliothek</button>
       <button class="btn mob" id="bProps">Eigenschaften</button>
@@ -249,7 +250,7 @@ details.grp summary{font:600 14px var(--display);cursor:pointer;margin-bottom:8p
 
 <script>
 'use strict';
-const APP_VERSION = '2.2';
+const APP_VERSION = '2.3';
 /* =====================================================================
    PS Cartoon Studio 1.0
    Aufbau:
@@ -2083,7 +2084,7 @@ $('#bExport').addEventListener('click', e => {
   const r = e.currentTarget.getBoundingClientRect();
   showMenu(r.left, r.bottom + 6, fileItems());
 });
-function fileItems() { return [{ label: project.format === 'hoch' ? 'Format: Querformat 16:9' : 'Format: Hochkant 9:16 (TikTok, Reels)', fn: toggleFormat }, '-', { label: 'Projekt als JSON speichern', fn: exportJSON }, { label: 'JSON-Projekt öffnen …', fn: () => $('#fJson').click() }, '-',
+function fileItems() { return [{ label: '🧊 3D-Studio öffnen (Beta)', fn: () => { location.href = '3d/'; } }, '-', { label: project.format === 'hoch' ? 'Format: Querformat 16:9' : 'Format: Hochkant 9:16 (TikTok, Reels)', fn: toggleFormat }, '-', { label: 'Projekt als JSON speichern', fn: exportJSON }, { label: 'JSON-Projekt öffnen …', fn: () => $('#fJson').click() }, '-',
     { label: 'Aktuelles Bild als PNG', fn: exportPNG }, { label: ui.film ? 'Ganzen Film als Video aufnehmen' : 'Szene als Video aufnehmen', fn: exportVideo }, '-',
     { label: 'Beispielprojekt laden', fn: () => showModal('Beispielprojekt laden?', 'Das aktuelle Projekt wird ersetzt. Speichere es vorher, wenn du es behalten möchtest.', [{ label: 'Abbrechen' }, { label: 'Beispiel laden', primary: true, fn: () => loadData(exampleProject()) }]) },
     { label: 'Neues leeres Projekt', fn: () => showModal('Neues Projekt anlegen?', 'Das aktuelle Projekt wird ersetzt. Speichere es vorher, wenn du es behalten möchtest.', [{ label: 'Abbrechen' }, { label: 'Neu anlegen', primary: true, fn: () => loadData(blankProject()) }]) }]; }
