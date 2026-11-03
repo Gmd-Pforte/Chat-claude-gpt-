@@ -402,6 +402,99 @@ part(B.chest, SPH, '#232229', [0, 0.16, -0.15], [0.2, 0.15, 0.1], [0.2, 0, 0], 0
 part(B.chest, SPH, '#2b2a31', [0, 0.155, 0.0], [0.15, 0.06, 0.13], null, 0);
 
 char.traverse(o => { if (o.isMesh && !o.isSkinnedMesh && o.geometry && o.geometry.index) TRIS += o.geometry.index.count / 3; });
+
+// ---------- Zweite Studiofigur: PS Bär (prozeduraler 3D-Toon, gemeinsames Animationsskelett) ----------
+const peterVisuals = [];
+char.traverse(o => { if (o.isMesh) peterVisuals.push({ mesh:o, shown:o.visible }); });
+const psBear = [];
+function bearPart(parent, geo, color, pos, scale, rotation, edge) {
+  const m = part(parent, geo, color, pos, scale, rotation, edge == null ? 0.008 : edge);
+  m.traverse(o => { if (o.isMesh) psBear.push(o); });
+  return m;
+}
+const bearFur = '#98613b', bearInner = '#603b27', bearMuzzle = '#e8ba82';
+const bearBlack = '#1d1d21', bearPants = '#202025', bearWhite = '#f3f2ed';
+bearPart(B.chest, SPH, bearBlack, [0,-0.09,0], [.265,.265,.183], null,.014);
+bearPart(B.chest, SPH, '#28282c', [0,.13,-.085], [.215,.10,.12], null,.01);
+bearPart(B.spine, SPH, bearBlack, [0,-.03,0], [.245,.13,.16], null,.009);
+bearPart(B.hips, SPH, bearPants, [0,-.045,0], [.212,.13,.143], null,.009);
+for (const [n,s] of SIDES) {
+  bearPart(B['upperArm'+n], SPH, bearBlack, [0,-.092,0], [.101,.137,.108], null,.010);
+  bearPart(B['foreArm'+n], SPH, bearBlack, [0,-.085,0], [.091,.123,.095], null,.008);
+  bearPart(B['hand'+n], SPH, bearFur, [0,-.068,.009], [.077,.079,.071], null,.008);
+  bearPart(B['thumb'+n], SPH, bearFur, [0,-.034,.018], [.029,.044,.037], null,.006);
+  bearPart(B['fingers'+n], SPH, bearFur, [0,-.044,-.012], [.057,.054,.056], null,.007);
+  bearPart(B['thigh'+n], SPH, bearPants, [0,-.145,0], [.124,.177,.135], null,.009);
+  bearPart(B['shin'+n], SPH, bearPants, [0,-.112,0], [.118,.145,.123], null,.008);
+  bearPart(B['foot'+n], SPH, bearBlack, [0,-.043,.072], [.133,.078,.213], null,.009);
+  bearPart(B['foot'+n], SPH, bearWhite, [0,-.084,.11], [.139,.026,.215], null,.005);
+  bearPart(B['foot'+n], SPH, bearWhite, [0,-.026,.224], [.113,.037,.065], null,.005);
+  for (let k=0;k<3;k++) bearPart(B['foot'+n], BOX, bearWhite, [0,.014-k*.023,.11+k*.018], [.135,.012,.016], null,0);
+}
+bearPart(H, SPH, bearFur, [0,.205,0], [.257,.267,.215], null,.012);
+for (const s of [-1,1]) {
+  bearPart(H, SPH, bearFur, [s*.206,.386,-.006], [.097,.107,.065], null,.009);
+  bearPart(H, SPH, bearInner, [s*.210,.388,.052], [.056,.066,.018], null,.003);
+}
+bearPart(H, SPH, bearMuzzle, [0,.098,.179], [.151,.117,.077], null,.008);
+bearPart(H, SPH, '#242024', [0,.165,.252], [.044,.031,.025], null,.006);
+const bearMouth = bearPart(H, SPH, '#341a18', [0,.048,.251], [.049,.015,.008], null,.005);
+const bearTongue = bearPart(H, SPH, '#e78783', [0,.028,.260], [.027,.012,.005], null,0);
+bearPart(H, SPH, bearBlack, [0,.420,-.012], [.241,.105,.198], null,.011);
+bearPart(H, SPH, '#252529', [0,.436,.063], [.24,.046,.183], null,.007);
+bearPart(H, SPH, bearBlack, [0,.393,.192], [.226,.029,.125], [-.13,0,0],.007);
+const bearEyes=[];
+for (const s of [-1,1]) {
+  bearPart(H, SPH, bearWhite, [s*.107,.244,.199], [.073,.070,.026], null,.007);
+  const pupil = bearPart(H, SPH, '#171216', [s*.107,.240,.226], [.030,.039,.014], null,.002);
+  bearPart(H, SPH, '#ffffff', [s*.097,.259,.240], [.010,.012,.004], null,0);
+  bearEyes.push(pupil);
+  // Dicke schwarze runde Brillenfassung mit Bügeln.
+  bearPart(H, new T.TorusGeometry(.082,.012,7,30), '#171719', [s*.109,.249,.231], [.98,.82,1], null,.003);
+  bearPart(H, SPH, bearInner, [s*.111,.330,.205], [.061,.018,.019], null,.004);
+  bearPart(H, BOX, bearBlack, [s*.210,.258,.173], [.095,.021,.020], null,0);
+}
+bearPart(H, BOX, bearBlack, [0,.260,.238], [.068,.019,.018], null,0);
+// Hoodie-Emblem im PS-Farbschema; alle Formen bleiben ohne externe Bibliotheken lokal.
+const bearLogo = canvasTex(256,256,(ctx,w,h)=>{
+  ctx.clearRect(0,0,w,h);
+  const grad=ctx.createLinearGradient(35,0,220,255);
+  grad.addColorStop(0,'#ed4d9b');grad.addColorStop(.49,'#f04ca5');grad.addColorStop(.51,'#39aff2');grad.addColorStop(1,'#248ee5');
+  ctx.strokeStyle=grad;ctx.lineWidth=14;ctx.lineCap='round';ctx.lineJoin='round';
+  ctx.beginPath();ctx.moveTo(87,76);ctx.bezierCurveTo(45,40,36,115,67,150);ctx.bezierCurveTo(88,178,102,181,128,193);
+  ctx.bezierCurveTo(157,180,179,163,190,133);ctx.bezierCurveTo(211,87,177,43,147,76);ctx.stroke();
+  ctx.beginPath();ctx.arc(82,85,19,Math.PI,.15);ctx.arc(172,85,19,Math.PI,.15);ctx.stroke();
+  ctx.fillStyle='#ed4d9b';ctx.beginPath();ctx.arc(100,132,7,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#39aff2';ctx.beginPath();ctx.arc(155,132,7,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle='#ffffff';ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(115,153);ctx.quadraticCurveTo(128,169,141,153);ctx.stroke();
+  for(let i=0;i<5;i++){const ht=18+(i%3)*13;ctx.strokeStyle=i<2?'#ed4d9b':'#39aff2';ctx.lineWidth=7;
+    ctx.beginPath();ctx.moveTo(21+i*10,135-ht/2);ctx.lineTo(21+i*10,135+ht/2);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(210+i*10,135-ht/2);ctx.lineTo(210+i*10,135+ht/2);ctx.stroke();}
+});
+const emblem = new T.Mesh(new T.PlaneGeometry(.31,.31),new T.MeshBasicMaterial({map:bearLogo,transparent:true,side:T.DoubleSide,depthWrite:false}));
+emblem.position.set(0,-.085,.183);B.chest.add(emblem);psBear.push(emblem);
+let studioCharacter = 'peter';
+function chooseCharacter(name) {
+  if (name !== 'peter' && name !== 'baer') return;
+  studioCharacter = name;
+  const isBear = name === 'baer';
+  for (const p of peterVisuals) p.mesh.visible = !isBear && p.shown;
+  for (const m of psBear) m.visible = isBear;
+  if (isBear) toast('PS Bär ist jetzt auf der 3D-Bühne');
+  else toast('PS Peter ist wieder auf der 3D-Bühne');
+  refreshChips();
+}
+function animateBearFace() {
+  if (studioCharacter !== 'baer') return;
+  const opening = Math.min(1, F.open + F.round*.7 + F.wideM*.6 + (voice.on ? voice.level*.7 : 0));
+  bearMouth.scale.y = .015 + opening*.073;
+  bearMouth.scale.x = .049 + F.wideM*.025 - F.round*.020;
+  bearTongue.visible = opening>.27;
+  const eyeHeight = Math.max(.16,1 - F.squint*.5 - F.happy*.55);
+  for (const e of bearEyes) e.scale.y = .039*eyeHeight;
+}
+for (const m of psBear) m.visible = false;
+
 const skelHelper = new T.SkeletonHelper(B.hips); skelHelper.material.depthTest = false; skelHelper.material.transparent = true; skelHelper.material.linewidth = 2; skelHelper.visible = false; scene.add(skelHelper);
 
 // ---------- Posen & Animationen ----------
@@ -953,6 +1046,7 @@ function step(dt, real) {
   applyLook(real); applySprings(dt);
   updateFace(dt > 0 ? dt : 0, g.w, g.face, !!g.talk || (video.on && video.sing && !gesture));
   updateTears(dt, !!g.tears);
+  animateBearFace();
   if (voice.on && voice.an) { voice.an.getFloatTimeDomainData(voice.data); let s = 0; for (const x of voice.data) s += x * x; voice.level = damp(voice.level, clamp(Math.sqrt(s / voice.data.length) * 6, 0, 1), 20, real);
     voice.an.getByteFrequencyData(voice.freq); let num = 0, den = 0; for (let i = 2; i < 120; i++) { num += i * voice.freq[i]; den += voice.freq[i]; } voice.cent = den ? clamp((num / den - 10) / 40, 0, 1) : 0; addRot(B.neck, voice.level * 0.06, 0, 0); }
   blob.position.x = char.position.x; blob.position.z = char.position.z; const bs = 0.95 * (1 - clamp((B.hips.position.y - 0.62) * 3, 0, 0.4)); blob.scale.set(bs, bs, 1);
@@ -962,6 +1056,7 @@ function step(dt, real) {
 
 // ---------- Bedienoberfläche ----------
 const TABS = {
+  figur: { label: 'Figuren', items: [['figur:peter', '👤 PS Peter'], ['figur:baer', '🐻 PS Bär']] },
   video: { label: 'Musikvideo', items: [['vplay', ''], ['vjump:64', 'Zum Refrain'], ['vjump:140', 'Zur Pause & Drop'], ['vjump:176', 'Zum Finale'], ['vcam', 'Regie-Kamera'], ['vstop', 'Stopp'], ['vsong', 'Anderen Song wählen'], ['vnote', '']] },
   bewegung: { label: 'Bewegung', items: [['stehen', 'Stehen'], ['gehen', 'Gehen'], ['laufen', 'Laufen'], ['drehen180', 'Drehen 180°'], ['drehen360', 'Drehen 360°'], ['bank', 'Zur Bank & hinsetzen'], ['aufstehen', 'Aufstehen']] },
   gesten: { label: 'Gesten', items: Object.keys(GESTURES).map(k => ['g:' + k, GESTURES[k].label]) },
@@ -995,6 +1090,7 @@ function refreshChips() {
     else if (id.startsWith('e:')) on = exprName === id.slice(2);
     else if (id.startsWith('c:')) on = camMode === id.slice(2);
     else if (id === 'vplay') { on = video.on; b.textContent = video.on ? '↺ Von vorne' : '▶ Musikvideo starten'; } else if (id === 'vstop') b.disabled = !video.on; else if (id === 'vcam') { on = camMode === 'video'; b.disabled = !video.on; }
+    else if (id.startsWith('figur:')) on = studioCharacter === id.slice(6);
     else if (id === 'skel') on = skelHelper.visible; else if (id === 'lookcam') on = lookCam; else if (id === 'voice') { on = voice.on; b.textContent = voice.on ? 'Stimme stoppen' : 'Stimme laden (MP3/WAV)'; }
     b.classList.toggle('on', on);
   });
@@ -1006,6 +1102,7 @@ function act(id) {
   if (id === 'vcam') { camMode = 'video'; video.seg = -1; refreshChips(); return; }
   if (id.startsWith('vjump:')) { const at = snapB(+id.slice(6)); if (!needSong(at)) startVideo(at); return; }
   if (video.on && TABS.bewegung.items.some(x => x[0] === id)) stopVideo();
+  if (id.startsWith('figur:')) { chooseCharacter(id.slice(6)); return; }
   if (id.startsWith('g:')) playGesture(id.slice(2));
   else if (id.startsWith('e:')) exprName = id.slice(2);
   else if (id.startsWith('c:')) setCam(id.slice(2));
