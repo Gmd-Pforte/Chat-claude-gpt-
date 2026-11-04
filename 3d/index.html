@@ -147,6 +147,17 @@ button,input{font:inherit;color:inherit}
 #panel.expanded .filmControls input,#panel.expanded .filmControls select{width:100%;max-width:none}
 #panel.expanded .filmControls button{min-height:48px}}
 
+/* Mobile Figurensteuerung: joystick links, Gesten rechts – oberhalb der Studioleiste. */
+#touchControls{position:fixed;z-index:5;left:0;right:0;bottom:calc(132px + env(safe-area-inset-bottom,0px));display:flex;justify-content:space-between;align-items:flex-end;padding:0 max(16px,env(safe-area-inset-left,0px)) 0 max(16px,env(safe-area-inset-right,0px));pointer-events:none}
+#touchControls[hidden]{display:none!important}
+#touchStick{position:relative;width:130px;height:130px;border:2px solid rgba(255,255,255,.3);border-radius:50%;background:rgba(20,19,29,.46);box-shadow:inset 0 0 0 16px rgba(255,255,255,.035);touch-action:none;pointer-events:auto;user-select:none}
+#touchStick::before{content:'↑';position:absolute;top:6px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,.5)}
+#touchKnob{position:absolute;left:50%;top:50%;width:60px;height:60px;margin:-30px 0 0 -30px;border-radius:50%;border:2px solid #ffbf83;background:linear-gradient(145deg,#ffad6f,#b4512c);box-shadow:0 4px 12px rgba(0,0,0,.45);transition:transform .08s;pointer-events:none}
+#touchActions{display:flex;flex-direction:column;align-items:flex-end;gap:9px;pointer-events:auto}
+.touchAct{min-width:82px;height:45px;padding:0 14px;border:1px solid rgba(255,255,255,.3);border-radius:25px;background:rgba(28,23,40,.85);color:white;font-weight:700;touch-action:none;user-select:none}
+.touchAct:active,.touchAct.held{background:#ff8a3d;color:#20120c}
+#touchToggle{position:fixed;z-index:5;right:12px;bottom:calc(106px + env(safe-area-inset-bottom,0px));border:1px solid var(--line);border-radius:18px;background:#312a40;padding:5px 12px;cursor:pointer;font-size:12px;font-weight:700}
+@media(max-width:640px){#touchControls{bottom:calc(138px + env(safe-area-inset-bottom,0px))}#touchStick{width:116px;height:116px}#touchActions .touchAct{height:40px;min-width:72px;font-size:12px}#hint{display:none}}
 </style>
 </head>
 <body>
@@ -174,6 +185,11 @@ button,input{font:inherit;color:inherit}
 
 <div id="hint">Ziehen = Kamera drehen · Mausrad oder zwei Finger = Zoom</div>
 <div id="toast" hidden></div>
+<div id="touchControls" aria-label="Figur mit Touch bewegen">
+  <div id="touchStick" role="group" aria-label="Joystick für die Figur"><div id="touchKnob"></div></div>
+  <div id="touchActions"><button id="touchRun" class="touchAct" type="button">🏃 Rennen</button><button id="touchWave" class="touchAct" type="button">👋 Winken</button><button id="touchStop" class="touchAct" type="button">■ Stopp</button></div>
+</div>
+<button id="touchToggle" type="button" aria-pressed="true" aria-controls="touchControls">🎮 Steuerung an</button>
 <section id="panel" aria-label="Steuerung">
   <nav id="tabs"></nav>
   <div class="chips" id="chips"></div>
@@ -1008,6 +1024,42 @@ function setCam(m) {
   if (m === 'frei') camD.tgt.copy(cam.tgt);
   refreshChips();
 }
+// Virtueller analoger Joystick. Pointer-Capture hält Bewegungen auch außerhalb des Kreises stabil.
+const touchCtl = { x:0, y:0, active:false, running:false, pointer:null };
+const stick = $('#touchStick'), knob = $('#touchKnob');
+function stickPosition(e) {
+  const r = stick.getBoundingClientRect(), radius = Math.min(r.width,r.height) * .35;
+  const dx = e.clientX-(r.left+r.width/2), dy = e.clientY-(r.top+r.height/2);
+  const magnitude = Math.hypot(dx,dy), factor = magnitude>radius ? radius/magnitude : 1;
+  touchCtl.x=dx*factor/radius; touchCtl.y=-dy*factor/radius;
+  if(Math.hypot(touchCtl.x,touchCtl.y)<.12){touchCtl.x=0;touchCtl.y=0;}
+  knob.style.transform='translate('+(touchCtl.x*radius)+'px,'+(-touchCtl.y*radius)+'px)';
+}
+function touchBegin(e) {
+  if(touchCtl.pointer!==null)return;
+  e.preventDefault();touchCtl.pointer=e.pointerId;touchCtl.active=true;
+  stick.setPointerCapture(e.pointerId);stickPosition(e);
+  if(video.on)stopVideo();
+  if(paused)setPaused(false);
+  tl.playing=false;tasks=[];task=null;settle=null;
+}
+function touchEnd(e) {
+  if(e && touchCtl.pointer!==e.pointerId)return;
+  touchCtl.pointer=null;touchCtl.active=false;touchCtl.x=0;touchCtl.y=0;
+  knob.style.transform='translate(0,0)';
+  if(!seated){playClip('idle',.22);mode='Stehen';status();refreshChips();}
+}
+stick.addEventListener('pointerdown',touchBegin);
+stick.addEventListener('pointermove',e=>{if(e.pointerId===touchCtl.pointer){e.preventDefault();stickPosition(e);}});
+stick.addEventListener('pointerup',touchEnd);stick.addEventListener('pointercancel',touchEnd);
+stick.addEventListener('lostpointercapture',touchEnd);
+const runBtn=$('#touchRun');
+runBtn.addEventListener('pointerdown',e=>{e.preventDefault();touchCtl.running=true;runBtn.classList.add('held');runBtn.setPointerCapture(e.pointerId);});
+function stopRun(){touchCtl.running=false;runBtn.classList.remove('held');}
+runBtn.addEventListener('pointerup',stopRun);runBtn.addEventListener('pointercancel',stopRun);runBtn.addEventListener('lostpointercapture',stopRun);
+$('#touchWave').addEventListener('click',()=>{if(paused)setPaused(false);playGesture('wave');});
+$('#touchStop').addEventListener('click',()=>{touchEnd();stopRun();if(video.on)stopVideo();cmd('stehen');});
+$('#touchToggle').addEventListener('click',()=>{const controls=$('#touchControls'),show=controls.hidden;controls.hidden=!show;$('#touchToggle').setAttribute('aria-pressed',String(show));$('#touchToggle').textContent=show?'🎮 Steuerung an':'🎮 Steuerung aus';if(!show){touchEnd();stopRun();}});
 const ptrs = new Map(); let pinch0 = 0, r0 = 0;
 canvas.addEventListener('pointerdown', e => { canvas.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); r0 = camD.r; } hideHint(); });
 canvas.addEventListener('pointermove', e => {
@@ -1293,7 +1345,19 @@ function step(dt, real) {
   if (video.on) videoStep(dt);
   else if (task && dt > 0 && task.update(dt)) nextTask();
   if (dt > 0) { yawVel = damp(yawVel, 0, 4, dt); }
-  const v = video.on ? 0 : speedNow(); char.position.addScaledVector(forward(), v * dt);
+  // Joystick bewegt die Figur relativ zur Kamera, statt die Kamera selbst zu verschieben.
+  const manualPower = touchCtl.active ? Math.min(1,Math.hypot(touchCtl.x,touchCtl.y)) : 0;
+  if(manualPower>.12 && !seated && dt>0) {
+    const th=cam.th, wx=Math.cos(th)*touchCtl.x-Math.sin(th)*touchCtl.y;
+    const wz=-Math.sin(th)*touchCtl.x-Math.cos(th)*touchCtl.y;
+    const targetYaw=Math.atan2(wx,wz), turn=clamp(angDiff(yaw,targetYaw),-5*dt,5*dt);
+    yaw+=turn;yawVel=turn/dt;
+    const fast=touchCtl.running, gait=fast?'run':'walk';
+    if(curName!==gait)playClip(gait,.2);
+    char.position.addScaledVector(forward(),(fast?GAIT.run.v:GAIT.walk.v)*manualPower*dt);
+    mode=fast?'Laufen':'Gehen';status();
+  } else if(touchCtl.active && !seated && curName!=='idle'){playClip('idle',.25);mode='Stehen';status();}
+  const v = touchCtl.active || video.on ? 0 : speedNow(); char.position.addScaledVector(forward(), v * dt);
   if (settle && dt > 0) { settle.t += dt; char.position.x = damp(char.position.x, settle.p.x, 6, dt); char.position.z = damp(char.position.z, settle.p.z, 6, dt); if (settle.t > 1.2) settle = null; }
   if (char.position.length() > 9) char.position.setLength(9);
   char.rotation.y = yaw;
