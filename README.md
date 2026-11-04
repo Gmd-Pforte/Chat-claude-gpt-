@@ -21,6 +21,7 @@ Läuft am PC, Tablet und Handy. Keine Anmeldung, keine Cloud, keine kostenpflich
 | Pfad | Inhalt |
 |---|---|
 | `index.html` | Das komplette Studio (eine Datei, funktioniert auch offline) |
+| `25d/index.html` | Das 2.5D-Studio |
 | `figuren/<name>/teilebogen.png` | Original-Teilebögen der gezeichneten Figuren |
 | `projekte/` | Beispielprojekte zum Öffnen über **Datei ▾ → JSON-Projekt öffnen** |
 | `sw.js` | Entfernt den Offline-Speicher der früheren App aus diesem Repo |
@@ -32,6 +33,10 @@ Läuft am PC, Tablet und Handy. Keine Anmeldung, keine Cloud, keine kostenpflich
 3. Claude schneidet die Teile aus, setzt die Gelenkpunkte und trägt die Figur im Studio ein.
 
 Die Wiedergabe erfolgt über GitHub Pages (`.github/workflows/static.yml`), sobald Änderungen auf `main` landen.
+
+## 2.5D-Studio (neu)
+
+Unter **/25d/** (oder über den Knopf **2.5D** im Studio) läuft die neue 2.5D-Ausgabe des Studios: dieselben Funktionen wie das 2D-Studio (Zeitleiste, Szenen, Audio, MP4-Export, Hochkant), aber nur mit den neuen flachen Figuren im South-Park-ähnlichen Bewegungsstil. Sie hat einen eigenen Projektspeicher und startet mit dem Beispiel „Peter 2.5D“ (Kleinstadt + Party).
 
 ## 3D-Studio (Beta)
 
