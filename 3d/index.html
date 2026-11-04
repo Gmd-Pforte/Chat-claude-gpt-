@@ -467,7 +467,7 @@ function projMat(tex, skinning, noSide, head) {
     sh.fragmentShader = 'uniform sampler2D tProj;\nvarying vec2 vUF;\nvarying vec2 vUS;\nvarying vec2 vUB;\nvarying vec3 vPN;\n' +
       sh.fragmentShader.replace('#include <map_fragment>', [
         'vec3 pn = normalize(vPN);',
-        head ? 'float wf = smoothstep(-0.3, 0.25, pn.z) * (1.0 - smoothstep(0.86, 0.98, abs(pn.x))) + 0.001, wb = smoothstep(-0.3, -0.6, pn.z) * (1.0 - smoothstep(0.86, 0.98, abs(pn.x))), ws = smoothstep(0.86, 0.98, abs(pn.x)) * (1.0 - smoothstep(-0.05, 0.25, pn.z));' : noSide ? 'float wy = abs(pn.y); float wf = max(pn.z, 0.0) + 0.5 * wy + 0.01, wb = max(-pn.z, 0.0) + 0.5 * wy, ws = 0.0;' : 'float wf = pow(max(pn.z, 0.0), 3.0), wb = pow(max(-pn.z, 0.0), 3.0), ws = pow(abs(pn.x), 3.0) + 0.03;',
+        head ? 'float front = smoothstep(-0.22, 0.18, pn.z); float side = smoothstep(0.72, 0.94, abs(pn.x)); float wf = max(0.001, front * (1.0 - side)); float wb = (1.0 - front) * (1.0 - side); float ws = side;' : noSide ? 'float wy = abs(pn.y); float wf = max(pn.z, 0.0) + 0.5 * wy + 0.01, wb = max(-pn.z, 0.0) + 0.5 * wy, ws = 0.0;' : 'float wf = pow(max(pn.z, 0.0), 3.0), wb = pow(max(-pn.z, 0.0), 3.0), ws = pow(abs(pn.x), 3.0) + 0.03;',
         'vec4 tcol = (texture2D(tProj, vUF) * wf + texture2D(tProj, vUB) * wb + texture2D(tProj, vUS) * ws) / (wf + wb + ws);',
         'diffuseColor.rgb *= tcol.rgb;'].join('\n'));
   };
@@ -581,7 +581,7 @@ function skin(geo, fn) {
 // ---------- Körperteile ----------
 const MB = MODEL.body;
 // Rumpf (Hoodie + Hosenbund); oben an den Schultern leicht mit den Schulterknochen verbunden
-skinnedProj(skin(loftY(MB.torso.filter(r => r[0] < 1.15), { dome: 0.02 }), v => {
+skinnedProj(skin(loftY(MB.torso.filter(r => r[0] < 1.15).map(r => [r[0], r[1] * 1.055, r[2] * 1.055, r[3] * 1.025, r[4] * 1.025]), { dome: 0.02 }), v => {
   const base = chainW(v.y, [['hips'], ['spine', 0.7, 0.05], ['chest', 0.9, 0.06], ['neck', 1.16, 0.03]]);
   const k = 0.45 * sstep(0.13, 0.22, Math.abs(v.x)) * sstep(0.98, 1.1, v.y);
   return k > 0 ? base.map(([b, w]) => [b, w * (1 - k)]).concat([[v.x > 0 ? 'shoulderL' : 'shoulderR', k]]) : base;
@@ -650,17 +650,17 @@ const strings = [];
 const HAND = toon('#f0b487');
 for (const [n, s] of SIDES) {
   const hb = B['hand' + n];
-  part(hb, SPH, '', [0, -0.012, 0], [0.05, 0.03, 0.05], null, 0.009, { mat: HAND });          // Handgelenk
-  part(hb, SPH, '', [0, -0.065, 0.004], [0.036, 0.068, 0.06], null, 0.01, { mat: HAND });     // Handfläche
-  part(B['fingers' + n], SPH, '', [0, -0.034, -0.016], [0.03, 0.05, 0.042], null, 0.009, { mat: HAND });
-  for (const z of [-0.034, -0.005]) part(B['fingers' + n], SPH, '', [0, -0.07, z], [0.02, 0.022, 0.017], null, 0.006, { mat: HAND });
-  part(B['index' + n], SPH, '', [0, -0.042, 0.01], [0.022, 0.052, 0.019], null, 0.008, { mat: HAND });
-  part(B['thumb' + n], SPH, '', [0, -0.018, 0.022], [0.022, 0.038, 0.022], [0.7, 0, 0], 0.008, { mat: HAND });
+  part(hb, SPH, '', [0, -0.015, 0], [0.046, 0.035, 0.052], null, 0.008, { mat: HAND });          // Handgelenk
+  part(hb, SPH, '', [0, -0.065, 0.004], [0.051, 0.057, 0.063], null, 0.009, { mat: HAND });     // Handfläche
+  part(B['fingers' + n], SPH, '', [0, -0.016, -0.014], [0.042, 0.035, 0.047], null, 0.007, { mat: HAND });
+  for (const z of [-0.033, -0.006, 0.018]) part(B['fingers' + n], SPH, '', [0, -0.046, z], [0.023, 0.025, 0.015], null, 0.004, { mat: HAND });
+  part(B['index' + n], SPH, '', [0, -0.024, 0.01], [0.025, 0.036, 0.023], null, 0.006, { mat: HAND });
+  part(B['thumb' + n], SPH, '', [0, -0.016, 0.023], [0.027, 0.031, 0.026], [0.5, 0, 0], 0.006, { mat: HAND });
 }
 // Kapuze: liegt als Kragen um den Hals und hängt hinten herunter
-part(B.chest, new T.TorusGeometry(0.135, 0.06, 14, 30), '#232229', [0, 0.175, -0.02], [1.15, 1, 1.0], [Math.PI / 2 - 0.12, 0, 0], 0.011);
-part(B.chest, SPH, '#232229', [0, 0.16, -0.15], [0.2, 0.15, 0.1], [0.2, 0, 0], 0.011);
-part(B.chest, SPH, '#2b2a31', [0, 0.155, 0.0], [0.15, 0.06, 0.13], null, 0);
+part(B.chest, new T.TorusGeometry(0.14, 0.035, 14, 30), '#232229', [0, 0.159, -0.018], [1.15, 1, 1.0], [Math.PI / 2 - 0.12, 0, 0], 0.011);
+part(B.chest, SPH, '#232229', [0, 0.155, -0.14], [0.19, 0.09, 0.085], [0.2, 0, 0], 0.011);
+part(B.chest, SPH, '#2b2a31', [0, 0.15, 0.0], [0.143, 0.036, 0.11], null, 0);
 
 char.traverse(o => { if (o.isMesh && !o.isSkinnedMesh && o.geometry && o.geometry.index) TRIS += o.geometry.index.count / 3; });
 
