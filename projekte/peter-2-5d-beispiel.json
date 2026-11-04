@@ -1,0 +1,140 @@
+{
+ "app": "PS Cartoon Studio",
+ "version": 1,
+ "project": {
+  "app": "PS Cartoon Studio",
+  "version": 1,
+  "name": "Peter 2.5D Beispiel",
+  "format": "quer",
+  "active": 0,
+  "scenes": [
+   {
+    "id": "s1",
+    "name": "Peter in der Kleinstadt",
+    "duration": 26,
+    "bg": {
+     "type": "preset",
+     "id": "kleinstadt"
+    },
+    "camera": {
+     "x": 640,
+     "y": 420,
+     "zoom": 1.35,
+     "follow": "pn"
+    },
+    "fx": {
+     "vignette": true,
+     "fade": true,
+     "shake": true
+    },
+    "actors": [
+     {
+      "id": "pn",
+      "name": "PS Peter",
+      "kind": "cutout",
+      "char": "peter_neu",
+      "x": -120,
+      "y": 640,
+      "scale": 1.15,
+      "flip": false,
+      "view": "front",
+      "look": {
+       "height": 1,
+       "shirtColor": "#ff5fa2",
+       "motion": "flach"
+      },
+      "clips": [
+       {
+        "id": "b1",
+        "type": "gehen",
+        "start": 0,
+        "dur": 3.6,
+        "speed": 1,
+        "intensity": 1,
+        "toX": 470,
+        "toY": 640
+       },
+       {
+        "id": "b2",
+        "type": "winken",
+        "start": 3.7,
+        "dur": 2.2,
+        "speed": 1,
+        "intensity": 1
+       },
+       {
+        "id": "b3",
+        "type": "sprechen",
+        "start": 6.1,
+        "dur": 3.4,
+        "speed": 1,
+        "intensity": 1
+       },
+       {
+        "id": "b4",
+        "type": "nicken",
+        "start": 9.6,
+        "dur": 1.4,
+        "speed": 1,
+        "intensity": 1
+       },
+       {
+        "id": "b5",
+        "type": "gehen",
+        "start": 11.1,
+        "dur": 2.6,
+        "speed": 1,
+        "intensity": 1,
+        "toX": 820,
+        "toY": 640
+       },
+       {
+        "id": "b6",
+        "type": "tanzen",
+        "start": 13.8,
+        "dur": 4.2,
+        "speed": 1.0,
+        "intensity": 1
+       },
+       {
+        "id": "b7",
+        "type": "erschrecken",
+        "start": 18.2,
+        "dur": 1.5,
+        "speed": 1,
+        "intensity": 1
+       },
+       {
+        "id": "b8",
+        "type": "lachen",
+        "start": 19.9,
+        "dur": 2.2,
+        "speed": 1,
+        "intensity": 1
+       },
+       {
+        "id": "b9",
+        "type": "schuetteln",
+        "start": 22.2,
+        "dur": 1.6,
+        "speed": 1,
+        "intensity": 1
+       },
+       {
+        "id": "b10",
+        "type": "winken",
+        "start": 23.9,
+        "dur": 2.0,
+        "speed": 1,
+        "intensity": 1
+       }
+      ]
+     }
+    ],
+    "props": [],
+    "audio": []
+   }
+  ]
+ },
+ "assets": {}
+}

@@ -250,7 +250,7 @@ details.grp summary{font:600 14px var(--display);cursor:pointer;margin-bottom:8p
 
 <script>
 'use strict';
-const APP_VERSION = '2.4';
+const APP_VERSION = '2.5';
 /* =====================================================================
    PS Cartoon Studio 1.0
    Aufbau:
@@ -870,6 +870,19 @@ const BGS = {
     c.fillStyle = '#f1e2c9'; c.fillRect(0, 552, W, 12); c.strokeStyle = OUT; c.lineWidth = 3; c.beginPath(); c.moveTo(0, 552); c.lineTo(W, 552); c.stroke();
     c.fillStyle = '#4f6f96'; c.beginPath(); c.ellipse(640, 660, 440, 46, 0, 0, TAU); c.fill(); c.strokeStyle = '#e8d8b8'; c.lineWidth = 4; c.beginPath(); c.ellipse(640, 660, 410, 36, 0, 0, TAU); c.stroke();
   } },
+  kleinstadt: { label: 'Kleinstadt', draw(c) {
+    c.fillStyle = '#9fd8ff'; c.fillRect(0, 0, W, 560); c.fillStyle = '#c4e9ff'; c.beginPath(); c.arc(1090, 110, 60, 0, TAU); c.fill();
+    c.fillStyle = '#e6f0fa'; [[160, 120], [520, 80], [900, 150]].forEach(([x, y]) => { [[0, 0, 34], [34, -12, 40], [72, 0, 30]].forEach(([dx, dy, r]) => { c.beginPath(); c.arc(x + dx, y + dy, r, 0, TAU); c.fill(); }); });
+    c.lineWidth = 5; c.strokeStyle = OUT; c.lineJoin = 'round';
+    for (const [X, w, h, col] of [[30, 220, 210, '#e2a06a'], [300, 180, 160, '#9bc58a'], [540, 240, 230, '#d47c7c'], [840, 200, 180, '#8fa4d8'], [1080, 190, 200, '#e8cf6e']]) {
+      const Y = 560 - h; c.fillStyle = col; c.fillRect(X, Y, w, h); c.strokeRect(X, Y, w, h);
+      c.fillStyle = '#5b4a6e'; c.beginPath(); c.moveTo(X - 14, Y); c.lineTo(X + w / 2, Y - 70); c.lineTo(X + w + 14, Y); c.closePath(); c.fill(); c.stroke();
+      c.fillStyle = '#fff3c4'; for (let i = 0; i < 2; i++) { c.fillRect(X + 26 + i * (w - 90), Y + 40, 38, 38); c.strokeRect(X + 26 + i * (w - 90), Y + 40, 38, 38); }
+      c.fillStyle = '#6b4a35'; c.fillRect(X + w / 2 - 22, Y + h - 70, 44, 70); c.strokeRect(X + w / 2 - 22, Y + h - 70, 44, 70);
+    }
+    c.fillStyle = '#f4f7fb'; c.fillRect(0, 560, W, H - 560); c.beginPath(); c.moveTo(0, 560); c.lineTo(W, 560); c.stroke();
+    c.fillStyle = '#d9dfe8'; c.fillRect(0, 655, W, 50); c.fillStyle = '#c3cbd6'; for (let x = 20; x < W; x += 160) c.fillRect(x, 676, 80, 8);
+  } },
   park: { label: 'Park', draw(c) {
     const g = c.createLinearGradient(0, 0, 0, 560); g.addColorStop(0, '#79c6f2'); g.addColorStop(1, '#dff3fb'); c.fillStyle = g; c.fillRect(0, 0, W, 560);
     c.fillStyle = '#ffe58a'; c.beginPath(); c.arc(1110, 110, 52, 0, TAU); c.fill();
@@ -979,7 +992,7 @@ const CUTOUTS = {
     shin: { L: ['shinL', 107, 15, 91, 70], R: ['shinR', 108, 15, 91, 70] },
     shoe: { L: ['shoeL', 114, 26], R: ['shoeR', 151, 26], ankleH: 110 },
     hands: { open: { L: ['handOpenL', 67, 10, 90], R: ['handOpenR', 90, 10, 90] }, fist: { L: ['fistL', 73, 8, 90], R: ['fistR', 67, 8, 90] }, point: { L: ['pointL', 152, 59, 180], R: ['pointR', 12, 60, 0] } },
-    shoulderBase: 6, foreOnTop: true
+    shoulderBase: 6, foreOnTop: true, flat: true
   },
   peter_ps: {
     label: 'PS Peter (klassisch)', color: '#ff5fa2', scale: 0.25,
@@ -1150,9 +1163,20 @@ function drawCutoutActor(c, a, st) {
   c.translate(p.shiftX / S * 0.8, 0);
   if (C.side) { drawCutoutSide(c, img, C, p, st, S); c.restore(); return; }
   const deg = Math.PI / 180, tl = segLen(C.thigh.L), L = tl + segLen(C.shin.L);
-  const drop = p.hipDrop * tl + (p.bob - p.jump) / S * 0.55;
+  const flat = C.flat && (a.look.motion || 'flach') === 'flach';
+  if (flat) { c.rotate(clamp((p.legF - p.legB) * 0.075 + p.shiftX * 0.3 + p.torso * 0.12, -8, 8) * deg); }   // Watscheln: ganzer Körper kippt
+  const drop = p.hipDrop * tl + (p.bob - p.jump) / S * (flat ? 0.85 : 0.55);
   const hipH = C.shoe.ankleH + L - drop, waistH = hipH + (C.shorts.hips[0][1] - C.shorts.top[1]);
-  for (const [side, leg, knee, k] of [[-1, p.legB, p.kneeB, 'L'], [1, p.legF, p.kneeF, 'R']]) {
+  if (flat) for (const [side, leg, knee, k] of [[-1, p.legB, p.kneeB, 'L'], [1, p.legF, p.kneeF, 'R']]) {
+    // Flach: gerade Stummelbeine, Füße trippeln nach oben statt Knie zu beugen
+    const hx = C.shorts.hips[side < 0 ? 0 : 1][0] - C.shorts.top[0], lift = clamp((knee - 8 - p.hipDrop * 85) * 0.8, 0, 46);
+    const Hy = -hipH, Ay = Math.min(Hy + L, -C.shoe.ankleH) - lift, sl = segLen(C.shin[k]);
+    limbSeg(c, img, C, C.shin[k], hx, Math.max(Hy, Ay - sl), 90);
+    limbSeg(c, img, C, C.thigh[k], hx, Hy, 90);
+    const sh = C.shoe[k]; c.save(); c.translate(hx, Ay); c.rotate(-side * lift * 0.3 * deg); cutoutPart(c, img, C, sh[0], sh[1], sh[2]); c.restore();
+    jp(c, [hx, Hy]); jp(c, [hx, Ay]);
+  }
+  else for (const [side, leg, knee, k] of [[-1, p.legB, p.kneeB, 'L'], [1, p.legF, p.kneeF, 'R']]) {
     const hx = C.shorts.hips[side < 0 ? 0 : 1][0] - C.shorts.top[0];
     const dl = Math.max(0, drop) + Math.max(0, knee - 6 - p.hipDrop * 85) * 0.9 * (tl / 90);
     const th = Math.acos(clamp((L - dl) / L, 0.15, 1)) / deg, sway = clamp(leg, -40, 60) * 0.12;
@@ -1169,8 +1193,9 @@ function drawCutoutActor(c, a, st) {
   c.save(); c.translate(T.neck[0] - T.waist[0], T.neck[1] - T.waist[1]); jp(c, [0, 0]); c.rotate((p.head * 0.45 - p.bob * 0.6) * deg);
   drawCutoutHead(c, img, C, p, st.t);
   c.restore();
-  for (const [side, arm, elbow, point, k] of [[-1, Math.abs(p.armB), Math.abs(p.elbowB), 0, 'L'], [1, Math.abs(p.armF), Math.abs(p.elbowF), p.pointF, 'R']]) {
+  for (let [side, arm, elbow, point, k] of [[-1, Math.abs(p.armB), Math.abs(p.elbowB), 0, 'L'], [1, Math.abs(p.armF), Math.abs(p.elbowF), p.pointF, 'R']]) {
     const sh = T.shoulders[side < 0 ? 0 : 1], S0 = [sh[0] - T.waist[0], sh[1] - T.waist[1]], ua = C.upperArm[k], fa = C.foreArm[k];
+    if (flat) elbow *= 0.6;
     const aD = 90 - side * (arm + C.shoulderBase), fD = aD - side * elbow;
     const E = [S0[0] + Math.cos(aD * deg) * segLen(ua), S0[1] + Math.sin(aD * deg) * segLen(ua)];
     const Wr = [E[0] + Math.cos(fD * deg) * segLen(fa), E[1] + Math.sin(fD * deg) * segLen(fa)];
@@ -1832,7 +1857,7 @@ function renderProps() {
       group('Platzierung', [ctlRange('Startposition X', a, 'x', 0, W, 1), ctlRange('Startposition Y (Tiefe)', a, 'y', 300, H + 40, 1), ctlRange('Größe auf der Bühne', a, 'scale', 0.3, 2.5, 0.01, { unit: '×' }),
         ctlCheck('Schaut nach links', a, 'flip'), ctlCheck('Gelenke anzeigen', ui, 'showJoints', { noCommit: true }),
         btnRow([['Duplizieren', () => dupActor(a)], ['Nach vorne', () => reorder(sc.actors, a, 1)], ['Nach hinten', () => reorder(sc.actors, a, -1)], ['Löschen', () => delActor(a), 'danger']])]));
-    if (a.kind === 'cutout') { a.view = a.view || 'auto'; p.append(group('Figur', [ctlRange('Körpergröße', L, 'height', 0.6, 1.5, 0.01, { unit: '×' }), ctlSelect('Ansicht', a, 'view', [['auto', 'Automatisch (schräg beim Gehen und Reden)'], ['front', 'Immer von vorne'], ['schraeg', 'Immer schräg']]), el('p', 'hint', 'Diese Figur ist aus deinem gezeichneten Teilebogen gebaut. Aussehen ändern: neuen Teilebogen erstellen.')])); return; }
+    if (a.kind === 'cutout') { a.view = a.view || 'auto'; const CF = CUTOUTS[a.char] || {}; if (CF.flat) { L.motion = L.motion || 'flach'; } p.append(group('Figur', [ctlRange('Körpergröße', L, 'height', 0.6, 1.5, 0.01, { unit: '×' }), ctlSelect('Ansicht', a, 'view', [['auto', 'Automatisch (schräg beim Gehen und Reden)'], ['front', 'Immer von vorne'], ['schraeg', 'Immer schräg']]), ...(CF.flat ? [ctlSelect('Bewegungsstil', L, 'motion', [['flach', '2.5D flach (watscheln, trippeln)'], ['gelenk', 'Mit Gelenken (Knie, Ellbogen)']])] : []), el('p', 'hint', 'Diese Figur ist aus deinem gezeichneten Teilebogen gebaut. Aussehen ändern: neuen Teilebogen erstellen.')])); return; }
     p.append(group('Körper', [ctlRange('Körpergröße', L, 'height', 0.75, 1.3, 0.01, { unit: '×' }), ctlRange('Statur', L, 'build', 0.75, 1.4, 0.01, { unit: '×' }),
       ctlRange('Beinlänge', L, 'legs', 0.8, 1.25, 0.01, { unit: '×' }), ctlRange('Kopfgröße', L, 'headSize', 0.8, 1.35, 0.01, { unit: '×' })]));
     if (bear) {
