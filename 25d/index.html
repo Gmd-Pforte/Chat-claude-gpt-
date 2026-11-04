@@ -154,7 +154,7 @@ details.grp summary{font:600 14px var(--display);cursor:pointer;margin-bottom:8p
   #mobScrub{display:flex!important;grid-area:scrub;align-items:center;gap:10px;padding:6px max(14px,env(safe-area-inset-right,0px)) 6px max(14px,env(safe-area-inset-left,0px));background:var(--panel);border-top:1px solid var(--line)}
   #mobScrub input{flex:1;min-width:0;accent-color:var(--accent);height:28px}
   #mTime{font-weight:600;font-size:12.5px;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--mute)}
-  #mobBar{display:grid!important;grid-area:bar;grid-template-columns:repeat(5,minmax(0,1fr));height:var(--barH);background:var(--panel);border-top:1px solid var(--line);
+  #mobBar{display:grid!important;grid-area:bar;grid-template-columns:repeat(6,minmax(0,1fr));height:var(--barH);background:var(--panel);border-top:1px solid var(--line);
     padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
   .mbtn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;background:none;border:0;color:var(--mute);font-size:11px;font-weight:600;cursor:pointer;min-width:0;padding:0 2px}
   .mbtn svg{width:23px;height:23px;flex:none}
@@ -254,7 +254,7 @@ details.grp summary{font:600 14px var(--display);cursor:pointer;margin-bottom:8p
 
 <script>
 'use strict';
-const APP_VERSION = '1.6';
+const APP_VERSION = '1.7';
 const STUDIO25 = true; // 2.5D-Ausgabe: nur flache Figuren, eigener Speicher
 var LIVE = null; // Live-Avatar-Zustand (siehe unten)
 /* =====================================================================
@@ -2317,7 +2317,7 @@ function musicVideo(hoch) {
   });
   inp.click();
 }
-function fileItems() { return [{ label: '🎵 Musikvideo „EINS ZWEI DREI VIER“ (Song wählen)', fn: () => musicVideo(false) }, { label: '🎵 … dasselbe hochkant 9:16', fn: () => musicVideo(true) }, '-', { label: '🎙 Live-Avatar (Mikrofon)', fn: liveOpen }, '-', { label: '🎵 Musikvideo aus deinem Song (automatisch)', fn: () => autoMusicVideo(false) }, { label: '🎵 … dasselbe hochkant 9:16', fn: () => autoMusicVideo(true) }, '-', { label: '🎬 2.5D-Studio öffnen (neu)', fn: () => { location.href = '25d/'; } }, { label: '🎨 Klassisches 2D-Studio öffnen', fn: () => { location.href = '../'; } }, { label: '🧊 3D-Studio öffnen (Beta)', fn: () => { location.href = '../3d/'; } }, '-', { label: project.format === 'hoch' ? 'Format: Querformat 16:9' : 'Format: Hochkant 9:16 (TikTok, Reels)', fn: toggleFormat }, '-', { label: 'Projekt als JSON speichern', fn: exportJSON }, { label: 'JSON-Projekt öffnen …', fn: () => $('#fJson').click() }, '-',
+function fileItems() { return [{ label: '🎵 Musikvideo „EINS ZWEI DREI VIER“ (Song wählen)', fn: () => musicVideo(false) }, { label: '🎵 … dasselbe hochkant 9:16', fn: () => musicVideo(true) }, '-', { label: '🎙 Live-Avatar (Mikrofon)', fn: liveOpen }, '-', { label: '🎵 Musikvideo aus deinem Song (automatisch)', fn: () => autoMusicVideo(false) }, { label: '🎵 … dasselbe hochkant 9:16', fn: () => autoMusicVideo(true) }, '-', { label: '🎨 Klassisches 2D-Studio öffnen', fn: () => { location.href = '../'; } }, { label: '🧊 3D-Studio öffnen (Beta)', fn: () => { location.href = '../3d/'; } }, '-', { label: project.format === 'hoch' ? 'Format: Querformat 16:9' : 'Format: Hochkant 9:16 (TikTok, Reels)', fn: toggleFormat }, '-', { label: 'Projekt als JSON speichern', fn: exportJSON }, { label: 'JSON-Projekt öffnen …', fn: () => $('#fJson').click() }, '-',
     { label: 'Aktuelles Bild als PNG', fn: exportPNG }, { label: ui.film ? 'Ganzen Film als Video aufnehmen' : 'Szene als Video aufnehmen', fn: exportVideo }, '-',
     { label: 'Beispielprojekt laden', fn: () => showModal('Beispielprojekt laden?', 'Das aktuelle Projekt wird ersetzt. Speichere es vorher, wenn du es behalten möchtest.', [{ label: 'Abbrechen' }, { label: 'Beispiel laden', primary: true, fn: () => loadData(exampleProject()) }]) },
     { label: 'Neues leeres Projekt', fn: () => showModal('Neues Projekt anlegen?', 'Das aktuelle Projekt wird ersetzt. Speichere es vorher, wenn du es behalten möchtest.', [{ label: 'Abbrechen' }, { label: 'Neu anlegen', primary: true, fn: () => loadData(blankProject()) }]) }]; }
