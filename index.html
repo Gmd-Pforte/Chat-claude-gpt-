@@ -251,7 +251,7 @@ details.grp summary{font:600 14px var(--display);cursor:pointer;margin-bottom:8p
 
 <script>
 'use strict';
-const APP_VERSION = '2.8';
+const APP_VERSION = '2.9';
 /* =====================================================================
    PS Cartoon Studio 1.0
    Aufbau:
@@ -403,7 +403,8 @@ function evalActor(sc, a, t) {
   const h = hashId(a.id), p = Object.assign({}, NEUTRAL), R = rig(a);
   const br = Math.sin(t * 2.1 + h); // Atmen
   p.torso += br * 0.7; p.armF += br * 1.6; p.armB -= br * 1.3; p.head -= br * 0.6;
-  let x = a.x, y = a.y, facing = a.flip ? -1 : 1, ctrl = null;
+  let x = a.x, y = a.y, facing = a.flip ? -1 : 1, ctrl = null, busy = 0;
+  const mu = a.look && a.look.react === false ? null : musicAt(sc, t);
   const clips = a.clips.slice().sort((m, n) => m.start - n.start);
   for (const c of clips) {
     const A = ANIMS[c.type]; if (!A || !A.move) continue;
@@ -415,19 +416,27 @@ function evalActor(sc, a, t) {
       const u0 = (t - c.start) / c.dur, u = u0 + (smooth(u0) - u0) * 0.4; x = fx + dx * u; y = fy + (ty - fy) * u;
       const dist = Math.hypot(dx, ty - fy) * u;
       const stride = A.stride * a.scale * (a.look.height || 1) * ((R.thigh + R.shin) / 102);
-      blend(p, walkPose(dist / stride, A.run), fadeW(c, t, 0.2, 0.2));
+      const ww = fadeW(c, t, 0.2, 0.2); busy = Math.max(busy, ww); blend(p, walkPose(dist / stride, A.run), ww);
     }
   }
   for (const c of clips) {
     const A = ANIMS[c.type]; if (!A || A.move) continue;
     if (t < c.start || t > c.start + c.dur) continue;
     const w = fadeW(c, t, A.fadeIn ?? 0.25, A.fadeOut ?? 0.25); if (w <= 0) continue;
-    const lt = (t - c.start) * (c.speed || 1), tgt = {};
+    let lt = (t - c.start) * (c.speed || 1); const tgt = {}, dance = DANCES.has(c.type) && A.loop;
+    if (mu && dance && c.sync !== false) lt = Math.max(0, mu.beat) * 0.4;   // im Takt: Tanzschleife sitzt auf den Beats
+    if (dance) busy = Math.max(busy, w);
     if (c.type === 'pose') Object.assign(tgt, c.pose || {});
     else for (const k in A.keys) tgt[k] = A.loop ? sampleKeys(A.keys[k], lt / A.len, true) : sampleKeys(A.keys[k], lt, false);
-    const inten = c.intensity ?? 1;
+    const inten = (c.intensity ?? 1) * (mu && dance ? 0.6 + 0.6 * clamp(mu.e, 0, 1) : 1);
     if (inten !== 1) for (const k in tgt) { const n = NEUTRAL[k]; if (n !== undefined) tgt[k] = n + (tgt[k] - n) * inten; }
     blend(p, tgt, w);
+  }
+  // Mitwippen: Figuren ohne Tanz/Gehen grooven zur Musik (Beat, Lautstärke, Bass)
+  if (mu) {
+    const g = smooth(clamp((mu.e - 0.12) / 0.55, 0, 1)) * (1 - busy) * (a.look.groove ?? 1), pulse = Math.exp(-mu.ph * 5), side = (Math.floor(mu.beat) & 1) ? 1 : -1;
+    if (g > 0.01) { p.bob += g * (9 * pulse + mu.kick * 5); p.head += g * (8 * pulse - 2.5); p.torso += g * side * 3.5 * Math.sin(mu.ph * Math.PI);
+      p.armF += g * 7 * pulse; p.armB -= g * 7 * pulse; p.elbowF += g * 10 * pulse; p.elbowB += g * 10 * pulse; if (p.shiftX !== undefined) p.shiftX += g * side * 3 * Math.sin(mu.ph * Math.PI); }
   }
   // Lippensynchronisation aus zugeordneten Audiospuren (lautstärkeabhängig)
   for (const au of sc.audio) {
@@ -1374,10 +1383,48 @@ function analyze(buf) {
   const out = new Float32Array(n); for (let i = 0; i < n; i++) out[i] = Math.min(1, ((env[i - 1] || 0) + 2 * env[i] + (env[i + 1] || 0)) / 4 / (ref || 1));
   return out;
 }
+// Musik-Analyse: Tempo (BPM), Taktschläge, Lautstärke-Verlauf und Bass-Schläge
+const RX_RATE = 100;
+function musicAnalyze(buf) {
+  const sr = buf.sampleRate, chs = []; for (let i = 0; i < Math.min(2, buf.numberOfChannels); i++) chs.push(buf.getChannelData(i));
+  const hop = Math.floor(sr / RX_RATE), n = Math.floor(chs[0].length / hop); if (n < RX_RATE * 8) return null;
+  const al = 1 - Math.exp(-2 * Math.PI * 140 / sr); let lp = 0;
+  const bass = new Float32Array(n), full = new Float32Array(n);
+  for (let i = 0; i < n; i++) { let sb = 0, sf = 0; const s0 = i * hop;
+    for (let j = s0; j < s0 + hop; j++) { const v = chs.length > 1 ? (chs[0][j] + chs[1][j]) * 0.5 : chs[0][j]; lp += al * (v - lp); sb += lp * lp; sf += v * v; }
+    bass[i] = Math.sqrt(sb / hop); full[i] = Math.sqrt(sf / hop); }
+  const on = new Float32Array(n);
+  for (let i = 1; i < n; i++) on[i] = Math.max(0, Math.log(bass[i] + 1e-3) - Math.log(bass[i - 1] + 1e-3)) + 0.5 * Math.max(0, Math.log(full[i] + 1e-3) - Math.log(full[i - 1] + 1e-3));
+  let mean = 0; for (let i = 0; i < n; i++) mean += on[i]; mean /= n; const oc = new Float32Array(n); for (let i = 0; i < n; i++) oc[i] = on[i] - mean;
+  const acf = L => { const Li = Math.floor(L), fr = L - Li; let s = 0; for (let i = 0; i + Li + 1 < n; i++) s += oc[i] * (oc[i + Li] * (1 - fr) + oc[i + Li + 1] * fr); return s; };
+  let best = -Infinity, bpm = 120;
+  for (let b = 70; b <= 190; b += 0.25) { const L = 60 * RX_RATE / b; const sc = (acf(L) + 0.5 * acf(2 * L)) * Math.exp(-0.5 * Math.pow(Math.log2(b / 125) / 1.0, 2)); if (sc > best) { best = sc; bpm = b; } }
+  // Feinabstimmung: Tempo und Phase so wählen, dass das Taktraster über den ganzen Song auf den Schlägen liegt
+  const comb = (P, ph) => { let s = 0; for (let k = ph; k < n - 1; k += P) { const i = Math.round(k); s += on[i] + 0.5 * (on[i - 1] || 0) + 0.5 * on[i + 1]; } return s; };
+  let bph = 0, bs = -1;
+  for (let b = bpm - 3; b <= bpm + 3; b += 0.05) { const P = 60 * RX_RATE / b; for (let ph = 0; ph < P; ph += 1) { const s = comb(P, ph); if (s > bs) { bs = s; bph = ph; bpm = b; } } }
+  { const P = 60 * RX_RATE / bpm; for (let ph = bph - 1; ph <= bph + 1; ph += 0.25) { const s = comb(P, ph); if (s > bs) { bs = s; bph = ph; } } }
+  bph = ((bph % (60 * RX_RATE / bpm)) + 60 * RX_RATE / bpm) % (60 * RX_RATE / bpm); bpm = Math.round(bpm * 100) / 100;
+  const pct = (arr, q) => { const a = Array.from(arr).sort((x, y) => x - y); return a[Math.floor(a.length * q)] || 1; };
+  const energy = new Float32Array(n), W = Math.round(RX_RATE * 0.4); let acc = 0;
+  for (let i = 0; i < n + W; i++) { if (i < n) acc += full[i]; if (i - 2 * W - 1 >= 0) acc -= full[i - 2 * W - 1]; const c = i - W; if (c >= 0 && c < n) energy[c] = acc / (Math.min(n - 1, i) - Math.max(0, i - 2 * W) + 1); }
+  const eRef = pct(energy, 0.95) || 1; for (let i = 0; i < n; i++) energy[i] = Math.min(1.2, energy[i] / eRef);
+  const kRef = pct(on, 0.985) || 1, kick = new Float32Array(n); for (let i = 0; i < n; i++) kick[i] = Math.min(1, on[i] / kRef);
+  return { bpm, period: 60 / bpm, beat0: bph / RX_RATE, energy, kick, rate: RX_RATE };
+}
+// Musikzustand einer Szene zum Zeitpunkt t (Taktposition, Lautstärke, Bass-Schlag)
+function musicAt(sc, t) {
+  if (!sc || sc.react === false) return null;
+  for (const au of sc.audio) { const inf = audioCache[au.asset]; if (!inf || !inf.rx) continue; const lt = t - au.start; if (lt < 0 || lt > inf.duration) continue;
+    const r = inf.rx, i = Math.min(r.energy.length - 1, Math.floor(lt * r.rate)), beat = (lt - r.beat0) / r.period; let k = 0;
+    for (let j = Math.max(0, i - 4); j <= i; j++) k = Math.max(k, r.kick[j]);
+    return { beat, ph: ((beat % 1) + 1) % 1, e: r.energy[i], kick: k, bpm: r.bpm }; }
+  return null;
+}
 async function decodeAsset(id, arrayBuf) {
   const ac = getAC(); const ab = arrayBuf ? arrayBuf.slice(0) : b64ToBuf(assets[id].data);
   const buffer = await new Promise((res, rej) => { const pr = ac.decodeAudioData(ab, res, rej); if (pr && pr.then) pr.then(res, rej); });
-  audioCache[id] = { buffer, duration: buffer.duration, env: analyze(buffer) };
+  audioCache[id] = { buffer, duration: buffer.duration, env: analyze(buffer), rx: buffer.duration > 12 ? musicAnalyze(buffer) : null };
 }
 function stopSources() { for (const s of sources) { try { s.stop(); } catch (e) {} } sources = []; }
 function scheduleAudio(fromT, whenCtx) {
@@ -1850,6 +1897,8 @@ function renderProps() {
       ctlRange('Dauer', sc, 'duration', 1, Math.max(60, Math.ceil(sc.duration)), 0.5, { unit: ' s', onInput: () => { time = Math.min(time, sc.duration); renderTimeline(); } }),
       group('Kamera', [ctlSelect('Kamera folgt', sc.camera, 'follow', [['', 'Niemandem (feste Kamera)'], ...sc.actors.map(a => [a.id, a.name])]), ctlRange('Zoom', sc.camera, 'zoom', 1, 3, 0.05, { unit: '×' }), ctlRange('Ausschnitt links/rechts', sc.camera, 'x', 0, W, 1), ctlRange('Ausschnitt oben/unten', sc.camera, 'y', 0, H, 1),
         btnRow([['Kamera zurücksetzen', () => { sc.camera = { x: W / 2, y: H / 2, zoom: 1 }; commit(); renderProps(); requestRender(); }]])]),
+      group('Musik', [(sc.react = sc.react !== false, ctlCheck('Figuren reagieren auf die Musik', sc, 'react')),
+        el('p', 'hint', (() => { const r = sc.audio.map(au => audioCache[au.asset] && audioCache[au.asset].rx).find(Boolean); return r ? 'Erkannt: ' + Math.round(r.bpm) + ' BPM. Figuren wippen im Takt, Tänze sitzen auf dem Beat, laute Stellen werden wilder.' : 'Füge einen Song hinzu – die Figuren wippen dann im Takt mit und tanzen auf dem Beat.'; })())]),
       group('Zeichentrick-Effekte', [(sc.fx = fxOf(sc), ctlCheck('Vignette (dunkle Bildränder)', sc.fx, 'vignette')), ctlCheck('Ein- und Ausblenden', sc.fx, 'fade'), ctlCheck('Kamerawackeln beim Erschrecken', sc.fx, 'shake'),
         el('p', 'hint', 'Das Ein- und Ausblenden siehst du beim Abspielen und im Video. Beim Bearbeiten bleibt das Bild hell.')]),
       el('p', 'hint', 'Tippe auf eine Figur, einen Gegenstand oder einen Block in der Zeitleiste, um ihn zu bearbeiten.'));
@@ -1859,7 +1908,7 @@ function renderProps() {
     const a = findActor(sel.id), L = a.look, bear = a.kind === 'bear', rerender = () => { renderProps(); };
     p.append(title(a.name, a.kind === 'cutout' ? 'Gezeichnet' : bear ? 'Bär' : 'Mensch'), ctlText('Name', a, 'name'),
       group('Platzierung', [ctlRange('Startposition X', a, 'x', 0, W, 1), ctlRange('Startposition Y (Tiefe)', a, 'y', 300, H + 40, 1), ctlRange('Größe auf der Bühne', a, 'scale', 0.3, 2.5, 0.01, { unit: '×' }),
-        ctlCheck('Schaut nach links', a, 'flip'), ctlCheck('Gelenke anzeigen', ui, 'showJoints', { noCommit: true }),
+        ctlCheck('Schaut nach links', a, 'flip'), (a.look.react = a.look.react !== false, ctlCheck('Reagiert auf Musik', a.look, 'react')), ctlCheck('Gelenke anzeigen', ui, 'showJoints', { noCommit: true }),
         btnRow([['Duplizieren', () => dupActor(a)], ['Nach vorne', () => reorder(sc.actors, a, 1)], ['Nach hinten', () => reorder(sc.actors, a, -1)], ['Löschen', () => delActor(a), 'danger']])]));
     if (a.kind === 'cutout') { a.view = a.view || 'auto'; const CF = CUTOUTS[a.char] || {}; if (CF.flat) { L.motion = L.motion || 'flach'; } p.append(group('Figur', [ctlRange('Körpergröße', L, 'height', 0.6, 1.5, 0.01, { unit: '×' }), ctlSelect('Ansicht', a, 'view', [['auto', 'Automatisch (schräg beim Gehen und Reden)'], ['front', 'Immer von vorne'], ['schraeg', 'Immer schräg']]), ...(CF.flat ? [ctlSelect('Bewegungsstil', L, 'motion', [['flach', '2.5D flach (watscheln, trippeln)'], ['gelenk', 'Mit Gelenken (Knie, Ellbogen)']])] : []), el('p', 'hint', 'Diese Figur ist aus deinem gezeichneten Teilebogen gebaut. Aussehen ändern: neuen Teilebogen erstellen.')])); return; }
     p.append(group('Körper', [ctlRange('Körpergröße', L, 'height', 0.75, 1.3, 0.01, { unit: '×' }), ctlRange('Statur', L, 'build', 0.75, 1.4, 0.01, { unit: '×' }),
@@ -2142,7 +2191,53 @@ $('#bExport').addEventListener('click', e => {
   const r = e.currentTarget.getBoundingClientRect();
   showMenu(r.left, r.bottom + 6, fileItems());
 });
-function fileItems() { return [{ label: '🎬 2.5D-Studio öffnen (neu)', fn: () => { location.href = '25d/'; } }, { label: '🧊 3D-Studio öffnen (Beta)', fn: () => { location.href = '3d/'; } }, '-', { label: project.format === 'hoch' ? 'Format: Querformat 16:9' : 'Format: Hochkant 9:16 (TikTok, Reels)', fn: toggleFormat }, '-', { label: 'Projekt als JSON speichern', fn: exportJSON }, { label: 'JSON-Projekt öffnen …', fn: () => $('#fJson').click() }, '-',
+// ---------- Automatisches Musikvideo aus jedem Song ----------
+// Analysiert Tempo und Lautstärke, teilt den Song in Abschnitte (ruhig / mittel / laut) und baut daraus Szenen mit Choreografie im Takt.
+function buildMusicVideo(rx, dur, name, hoch) {
+  const P = rx.period, chunk = 32 * P, b0 = rx.beat0, eAt = t => rx.energy[Math.min(rx.energy.length - 1, Math.max(0, Math.floor(t * rx.rate)))];
+  const cuts = [0]; for (let t = b0 + chunk; t < dur - chunk * 0.5; t += chunk) cuts.push(t); cuts.push(dur);
+  let parts = []; for (let i = 0; i < cuts.length - 1; i++) { let s = 0, c = 0; for (let t = cuts[i]; t < cuts[i + 1]; t += 0.1) { s += eAt(t); c++; } parts.push({ a: cuts[i], b: cuts[i + 1], e: s / c }); }
+  const em = Math.max(...parts.map(q => q.e)) || 1; parts.forEach(q => { const r = q.e / em; q.lv = r < 0.55 ? 0 : r < 0.8 ? 1 : 2; });
+  const sc = []; for (const q of parts) { const l = sc[sc.length - 1]; if (l && l.lv === q.lv && q.b - l.a < 50) l.b = q.b; else sc.push({ a: q.a, b: q.b, lv: q.lv }); }
+  const MOVES = [['nicken', 'tanzen', 'klatschen', 'tanzen'], ['tanzen', 'disco', 'klatschen', 'disco'], ['huepfen', 'disco', 'jubeln', 'tanzen']];
+  const BG = [['kleinstadt', 'park'], ['party'], ['buehne', 'party']], seen = [0, 0, 0];
+  const beatAt = t => b0 + Math.ceil((t - b0) / P - 0.001) * P, SP = Math.round(0.8 / (2 * P) * 1000) / 1000;
+  const CREW = [['sunny_neu', 190, 595, 0.9, false], ['baer_neu', 360, 630, 0.95, false], ['fb_neu', 830, 600, 0.9, false], ['ki_ps', 1000, 630, 1, true], ['tom_ps', 1110, 585, 0.95, true]].filter(c => CUTOUTS[c[0]]);
+  const scenes = sc.map((q, si) => {
+    const S = q.a, E = q.b, len = E - S, s = newScene((si + 1) + ' ' + ['Ruhiger Teil', 'Groove', 'Party-Teil'][q.lv]); s.duration = Math.round(len * 1000) / 1000;
+    const bgs = BG[q.lv]; s.bg = { type: 'preset', id: bgs[seen[q.lv]++ % bgs.length] };
+    const crew = s.bg.id === 'party';
+    const pet = newCutout(CUTOUTS.peter_neu ? 'peter_neu' : Object.keys(CUTOUTS)[0]); pet.x = 640; pet.y = 640; pet.scale = 1.15; pet.look.motion = 'flach';
+    const fill = (a, moves, off, from, inten) => { let t = beatAt(S + from) - S, i = off; while (t < len - 0.5) { const d = Math.min(8 * P, len - 0.05 - t); if (d < 1) break; a.clips.push(clip(moves[i % moves.length], Math.round(t * 1000) / 1000, Math.round(d * 1000) / 1000, { speed: SP, intensity: inten })); t += 8 * P; i++; } };
+    let start = 0;
+    if (si === 0) { pet.x = -120; const w = Math.min(4, len * 0.4); pet.clips.push(clip('gehen', 0, w, { toX: 640, toY: 640 }), clip('winken', w + 0.1, Math.min(2.2, len - w - 0.2))); start = w + 2.4; }
+    fill(pet, MOVES[q.lv], si, start, q.lv ? 1 : 0.75);
+    if (si === sc.length - 1 && len > 4) { const last = pet.clips[pet.clips.length - 1]; if (last && last.type !== 'gehen') last.dur = Math.max(0.5, Math.min(last.dur, len - 2.6 - last.start)); pet.clips.push(clip('winken', len - 2.5, 2.4)); }
+    s.actors.push(pet);
+    if (crew) CREW.forEach(([id, x, y, k, fl], ci) => { const a = newCutout(id); a.x = x; a.y = y; a.scale = k; a.flip = fl; a.look.motion = 'flach'; fill(a, MOVES[Math.max(1, q.lv)], ci + 1, 0, 0.9); s.actors.unshift(a); });
+    s.camera = crew ? { x: W / 2, y: 380, zoom: 1, follow: '' } : { x: W / 2, y: q.lv === 2 ? 380 : 400, zoom: q.lv === 2 ? 1.55 : 1.35, follow: pet.id };
+    if (hoch) { s.camera.zoom = Math.max(1, Math.round(s.camera.zoom * 80) / 100); s.camera.y = 440; s.camera.follow = pet.id; }
+    s.audio.push({ id: uid(), asset: 'song1', start: -S, volume: 1, sens: 1, actor: pet.id });
+    return s;
+  });
+  return { app: 'PS Cartoon Studio', version: 1, name: name + ' – Musikvideo', format: hoch ? 'hoch' : 'quer', active: 0, scenes };
+}
+function autoMusicVideo(hoch) {
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'audio/*,.mp3,.wav';
+  inp.addEventListener('change', async () => {
+    const f = inp.files[0]; if (!f) return; toast('Song wird analysiert …');
+    try {
+      const data = await fileToDataURL(f), ab = await f.arrayBuffer(), ac = getAC();
+      const buffer = await new Promise((res, rej) => { const pr = ac.decodeAudioData(ab, res, rej); if (pr && pr.then) pr.then(res, rej); });
+      const rx = musicAnalyze(buffer); if (!rx) { toast('Der Song ist zu kurz für ein Musikvideo.'); return; }
+      const name = f.name.replace(/\.[^.]+$/, ''), pr = buildMusicVideo(rx, buffer.duration, name, hoch);
+      await loadData({ project: pr, assets: { song1: { type: 'audio', name, mime: f.type || 'audio/mpeg', data } } });
+      ui.film = true; renderAll(); toast('Musikvideo fertig: ' + Math.round(rx.bpm) + ' BPM, ' + pr.scenes.length + ' Szenen – Abspielen drücken!');
+    } catch (e) { console.error(e); toast('Der Song konnte nicht gelesen werden.'); }
+  });
+  inp.click();
+}
+function fileItems() { return [{ label: '🎵 Musikvideo aus deinem Song (automatisch)', fn: () => autoMusicVideo(false) }, { label: '🎵 … dasselbe hochkant 9:16', fn: () => autoMusicVideo(true) }, '-', { label: '🎬 2.5D-Studio öffnen (neu)', fn: () => { location.href = '25d/'; } }, { label: '🧊 3D-Studio öffnen (Beta)', fn: () => { location.href = '3d/'; } }, '-', { label: project.format === 'hoch' ? 'Format: Querformat 16:9' : 'Format: Hochkant 9:16 (TikTok, Reels)', fn: toggleFormat }, '-', { label: 'Projekt als JSON speichern', fn: exportJSON }, { label: 'JSON-Projekt öffnen …', fn: () => $('#fJson').click() }, '-',
     { label: 'Aktuelles Bild als PNG', fn: exportPNG }, { label: ui.film ? 'Ganzen Film als Video aufnehmen' : 'Szene als Video aufnehmen', fn: exportVideo }, '-',
     { label: 'Beispielprojekt laden', fn: () => showModal('Beispielprojekt laden?', 'Das aktuelle Projekt wird ersetzt. Speichere es vorher, wenn du es behalten möchtest.', [{ label: 'Abbrechen' }, { label: 'Beispiel laden', primary: true, fn: () => loadData(exampleProject()) }]) },
     { label: 'Neues leeres Projekt', fn: () => showModal('Neues Projekt anlegen?', 'Das aktuelle Projekt wird ersetzt. Speichere es vorher, wenn du es behalten möchtest.', [{ label: 'Abbrechen' }, { label: 'Neu anlegen', primary: true, fn: () => loadData(blankProject()) }]) }]; }
