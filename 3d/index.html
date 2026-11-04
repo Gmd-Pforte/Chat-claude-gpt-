@@ -156,6 +156,9 @@ button,input{font:inherit;color:inherit}
 #touchActions{display:flex;flex-direction:column;align-items:flex-end;gap:9px;pointer-events:auto}
 .touchAct{min-width:82px;height:45px;padding:0 14px;border:1px solid rgba(255,255,255,.3);border-radius:25px;background:rgba(28,23,40,.85);color:white;font-weight:700;touch-action:none;user-select:none}
 .touchAct:active,.touchAct.held{background:#ff8a3d;color:#20120c}
+#poseToggle,#poseReset{position:fixed;z-index:6;right:max(12px,env(safe-area-inset-right,0px));top:calc(74px + env(safe-area-inset-top,0px));border:1px solid var(--line);border-radius:18px;background:#312a40;padding:5px 12px;cursor:pointer;font-size:12px;font-weight:700;color:inherit}
+#poseReset{top:calc(108px + env(safe-area-inset-top,0px))}
+#poseToggle[aria-pressed="true"]{background:#4fd1c5;color:#13111a;border-color:#4fd1c5}
 #touchToggle{position:fixed;z-index:5;right:12px;bottom:calc(106px + env(safe-area-inset-bottom,0px));border:1px solid var(--line);border-radius:18px;background:#312a40;padding:5px 12px;cursor:pointer;font-size:12px;font-weight:700}
 @media(max-width:640px){#touchControls{bottom:calc(138px + env(safe-area-inset-bottom,0px))}#touchStick{width:116px;height:116px}#touchActions .touchAct{height:40px;min-width:72px;font-size:12px}#hint{display:none}}
 </style>
@@ -190,6 +193,8 @@ button,input{font:inherit;color:inherit}
   <div id="touchActions"><button id="touchRun" class="touchAct" type="button">🏃 Rennen</button><button id="touchWave" class="touchAct" type="button">👋 Winken</button><button id="touchStop" class="touchAct" type="button">■ Stopp</button></div>
 </div>
 <button id="touchToggle" type="button" aria-pressed="true" aria-controls="touchControls">🎮 Steuerung an</button>
+<button id="poseToggle" type="button" aria-pressed="false" title="Pose-Modus: Hände und Füße ziehen">🦴 Pose</button>
+<button id="poseReset" type="button" hidden>↺ Pose lösen</button>
 <section id="panel" aria-label="Steuerung">
   <nav id="tabs"></nav>
   <div class="chips" id="chips"></div>
@@ -1327,6 +1332,127 @@ function videoStep(dt) {
 function setVideoTarget(v) { if (v.y === 'head') { B.head.getWorldPosition(tmpV); camD.tgt.set(tmpV.x, tmpV.y + 0.3, tmpV.z); } else camD.tgt.set(char.position.x, v.y, char.position.z); }
 function fmtSong(t) { const m = Math.floor(t / 60), s = Math.floor(t % 60); return m + ':' + String(s).padStart(2, '0'); }
 
+// ---------- Pose-Modus (Phase A): Hände und Füße per Finger ziehen, Zwei-Knochen-IK ----------
+// Algorithmus angelehnt an Ekza Studio, packages/rig/src/ik/twoBone.ts (MIT-Lizenz, (c) 2026 Ekza Studio contributors):
+// Kette aus der aktuellen Pose, Mittelgelenk nur in der Beugeebene, Kette auf den Zielstrahl schwenken, Beugung zur Pol-Seite.
+// Eigene Umsetzung mit three.js; es wurde kein Ekza-Quelltext übernommen. Läuft jedes Bild NACH Mixer, Gesten und Federn
+// auf den frisch wiederhergestellten Mixer-Werten (cleanQ) – es wird also nichts über Frames aufaddiert.
+const poseIK = {
+  on: false, w: 0, drag: null,
+  // Ziele im Raum der Figur (char), damit sie beim Drehen/Verschieben der Figur mitgehen
+  limbs: {
+    handL: { chain: ['upperArmL', 'foreArmL', 'handL'], pole: [0.55, -0.1, -0.6], col: 0xff5fa2, minBend: 0.05, maxBend: 2.6 },
+    handR: { chain: ['upperArmR', 'foreArmR', 'handR'], pole: [-0.55, -0.1, -0.6], col: 0xff5fa2, minBend: 0.05, maxBend: 2.6 },
+    footL: { chain: ['thighL', 'shinL', 'footL'], pole: [0.05, 0, 1], col: 0x4fd1c5, minBend: 0.0, maxBend: 2.4 },
+    footR: { chain: ['thighR', 'shinR', 'footR'], pole: [-0.05, 0, 1], col: 0x4fd1c5, minBend: 0.0, maxBend: 2.4 },
+  },
+};
+(function () {
+  const geo = new T.SphereGeometry(0.035, 16, 12);
+  for (const k in poseIK.limbs) {
+    const L = poseIK.limbs[k];
+    const m = new T.Mesh(geo, new T.MeshBasicMaterial({ color: L.col, depthTest: false, transparent: true, opacity: 0.9 }));
+    const ring = new T.Mesh(new T.RingGeometry(0.045, 0.058, 24), new T.MeshBasicMaterial({ color: 0x13111a, depthTest: false, side: T.DoubleSide }));
+    m.add(ring); m.renderOrder = 999; ring.renderOrder = 998; m.visible = false; scene.add(m);
+    L.handle = m; L.target = null; L.w = 0;
+  }
+})();
+const ikV = { a: new T.Vector3(), b: new T.Vector3(), c: new T.Vector3(), t: new T.Vector3(), p: new T.Vector3(), d: new T.Vector3(), n: new T.Vector3(), x: new T.Vector3(), y: new T.Vector3() };
+const ikQ = { pw: new T.Quaternion(), delta: new T.Quaternion(), endW: new T.Quaternion(), tmp: new T.Quaternion(), orig: [new T.Quaternion(), new T.Quaternion(), new T.Quaternion()] };
+function ikRotateBoneTo(bone, from, to) {
+  // dreht `bone` (lokal) so, dass die Weltrichtung `from` auf `to` zeigt
+  ikQ.delta.setFromUnitVectors(from.clone().normalize(), to.clone().normalize());
+  bone.parent.getWorldQuaternion(ikQ.pw);
+  // neu_lokal = P⁻¹ · Δ · P · alt_lokal
+  ikQ.tmp.copy(ikQ.pw).invert().multiply(ikQ.delta).multiply(ikQ.pw);
+  bone.quaternion.premultiply(ikQ.tmp);
+  bone.updateMatrixWorld(true);
+}
+function ikSolve(L, w) {
+  const [U, M, E] = L.chain.map(n => B[n]);
+  ikQ.orig[0].copy(U.quaternion); ikQ.orig[1].copy(M.quaternion); ikQ.orig[2].copy(E.quaternion);
+  char.updateMatrixWorld(true);
+  E.getWorldQuaternion(ikQ.endW);                       // Hand/Fuß-Ausrichtung aus der Animation merken
+  U.getWorldPosition(ikV.a); M.getWorldPosition(ikV.b); E.getWorldPosition(ikV.c);
+  const l1 = ikV.a.distanceTo(ikV.b), l2 = ikV.b.distanceTo(ikV.c), tot = l1 + l2;
+  ikV.t.copy(L.target).applyMatrix4(char.matrixWorld);
+  // Ziel auf die Reichweite begrenzen (unmögliche Ziele → Arm/Bein gestreckt in Richtung Ziel)
+  ikV.d.subVectors(ikV.t, ikV.a); let d = ikV.d.length();
+  const lo = Math.max(Math.abs(l1 - l2), tot * Math.sin(L.minBend / 2) * 0) + tot * 0.02, hi = tot * 0.995;
+  // Gelenkgrenze: maximale Beugung → minimaler Abstand
+  const dMin = Math.sqrt(l1 * l1 + l2 * l2 - 2 * l1 * l2 * Math.cos(Math.PI - L.maxBend));
+  d = clamp(d, Math.max(lo, dMin), hi); ikV.x.copy(ikV.d).normalize(); ikV.t.copy(ikV.a).addScaledVector(ikV.x, d);
+  // Pol (Richtung, in die Ellbogen/Knie zeigen) im Weltraum
+  ikV.p.set(L.pole[0], L.pole[1], L.pole[2]).applyQuaternion(char.quaternion).normalize();
+  ikV.n.copy(ikV.p).addScaledVector(ikV.x, -ikV.p.dot(ikV.x)); if (ikV.n.lengthSq() < 1e-8) ikV.n.set(0, 0, 1); ikV.n.normalize();
+  // Gesetz der Kosinusse: Lage des Mittelgelenks in der Ebene (a, Ziel, Pol)
+  const cosA = clamp((l1 * l1 + d * d - l2 * l2) / (2 * l1 * d), -1, 1), sinA = Math.sqrt(1 - cosA * cosA);
+  const midW = ikV.y.copy(ikV.a).addScaledVector(ikV.x, cosA * l1).addScaledVector(ikV.n, sinA * l1);
+  // 1) Oberarm/Oberschenkel auf den neuen Mittelpunkt schwenken
+  ikRotateBoneTo(U, ikV.d.subVectors(ikV.b, ikV.a).clone(), midW.clone().sub(ikV.a));
+  // 2) Unterarm/Unterschenkel auf das Ziel schwenken
+  M.getWorldPosition(ikV.b); E.getWorldPosition(ikV.c);
+  ikRotateBoneTo(M, ikV.c.clone().sub(ikV.b), ikV.t.clone().sub(ikV.b));
+  // 3) Hand/Fuß behalten ihre Welt-Ausrichtung aus der Animation
+  M.getWorldQuaternion(ikQ.pw); E.quaternion.copy(ikQ.pw.invert().multiply(ikQ.endW));
+  // weiches Ein-/Ausblenden
+  if (w < 0.999) { U.quaternion.copy(ikQ.orig[0].clone().slerp(U.quaternion, w)); M.quaternion.copy(ikQ.orig[1].clone().slerp(M.quaternion, w)); E.quaternion.copy(ikQ.orig[2].clone().slerp(E.quaternion, w)); }
+  U.updateMatrixWorld(true);
+}
+function applyPoseIK(dt) {
+  const k = 1 - Math.exp(-10 * Math.max(dt, 0.001));
+  for (const name in poseIK.limbs) {
+    const L = poseIK.limbs[name], want = poseIK.on && L.target ? 1 : 0;
+    L.w += (want - L.w) * (dt > 0 ? k : 1); if (L.w < 0.002 && !want) L.w = 0;
+    if (L.w > 0 && L.target) ikSolve(L, L.w);
+  }
+  // Griffe zeigen: gepinnt → am Ziel, sonst an der aktuellen Hand/am Fuß
+  char.updateMatrixWorld(true);
+  for (const name in poseIK.limbs) {
+    const L = poseIK.limbs[name]; L.handle.visible = poseIK.on;
+    if (!poseIK.on) continue;
+    if (L.target) L.handle.position.copy(L.target).applyMatrix4(char.matrixWorld); else B[L.chain[2]].getWorldPosition(L.handle.position);
+    L.handle.material.opacity = L.target ? 1 : 0.55; const s = poseIK.drag && poseIK.drag.name === name ? 1.35 : 1; L.handle.scale.setScalar(s);
+    L.handle.quaternion.copy(camera.quaternion);
+  }
+}
+// Touch: ein Finger auf einem Griff zieht das Gelenk; überall sonst bleibt Kamera/Zoom wie gehabt
+const ikRay = new T.Raycaster(), ikNdc = new T.Vector2(), ikPlane = new T.Plane();
+function ikPick(e) {
+  const r = canvas.getBoundingClientRect(); let best = null, bd = 34;
+  for (const name in poseIK.limbs) { const L = poseIK.limbs[name]; ikV.p.copy(L.handle.position).project(camera);
+    const sx = (ikV.p.x + 1) / 2 * r.width + r.left, sy = (1 - ikV.p.y) / 2 * r.height + r.top, dd = Math.hypot(sx - e.clientX, sy - e.clientY);
+    if (dd < bd && ikV.p.z < 1) { bd = dd; best = name; } }
+  return best;
+}
+function ikPointerWorld(e, out) {
+  const r = canvas.getBoundingClientRect(); ikNdc.set((e.clientX - r.left) / r.width * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  ikRay.setFromCamera(ikNdc, camera); return ikRay.ray.intersectPlane(ikPlane, out);
+}
+canvas.addEventListener('pointerdown', e => {
+  if (!poseIK.on || poseIK.drag) return; applyPoseIK(0); const name = ikPick(e); if (!name) return;
+  e.stopImmediatePropagation(); e.preventDefault(); canvas.setPointerCapture(e.pointerId);
+  const L = poseIK.limbs[name], wp = L.handle.position.clone();
+  ikPlane.setFromNormalAndCoplanarPoint(camera.getWorldDirection(new T.Vector3()).negate(), wp);
+  if (!L.target) L.target = wp.clone().applyMatrix4(char.matrixWorld.clone().invert());
+  poseIK.drag = { name, id: e.pointerId }; hideHint();
+}, true);
+canvas.addEventListener('pointermove', e => {
+  const D = poseIK.drag; if (!D || e.pointerId !== D.id) return; e.stopImmediatePropagation();
+  const hit = ikPointerWorld(e, new T.Vector3()); if (!hit) return;
+  const L = poseIK.limbs[D.name]; if (D.name.startsWith('foot')) hit.y = Math.max(hit.y, 0.035);   // Füße nicht in den Boden
+  L.target.copy(hit.applyMatrix4(char.matrixWorld.clone().invert()));
+}, true);
+const ikUp = e => { if (poseIK.drag && e.pointerId === poseIK.drag.id) { e.stopImmediatePropagation(); poseIK.drag = null; } };
+canvas.addEventListener('pointerup', ikUp, true); canvas.addEventListener('pointercancel', ikUp, true);
+function setPoseMode(on) {
+  poseIK.on = on; const b = $('#poseToggle'); b.setAttribute('aria-pressed', String(on)); b.textContent = on ? '🦴 Pose an' : '🦴 Pose';
+  $('#poseReset').hidden = !on; if (!on) poseIK.drag = null; else applyPoseIK(0);   // Griffe sofort an Hände/Füße setzen
+  if (on) toast('Pose-Modus: Punkte an Händen und Füßen ziehen · Kamera weiter mit freier Fläche');
+}
+$('#poseToggle').addEventListener('click', () => setPoseMode(!poseIK.on));
+$('#poseReset').addEventListener('click', () => { for (const k in poseIK.limbs) poseIK.limbs[k].target = null; toast('Pose gelöst'); });
+
 // ---------- Hauptschleife ----------
 let tempo = 1, paused = false, last = performance.now(), fpsN = 0, fpsT = 0, fps = 0;
 function speedNow() {
@@ -1370,6 +1496,7 @@ function step(dt, real) {
   for (const [n, s] of SIDES) { qA.setFromEuler(eA.set(0, 0, s * ARM_OUT, 'XYZ')); B['upperArm' + n].quaternion.premultiply(qA); }
   const g = applyGesture(dt);
   applyLook(real); applySprings(dt);
+  applyPoseIK(real);   // Pose-Modus (IK) nach Mixer, Gesten und Federn
   updateFace(dt > 0 ? dt : 0, g.w, g.face, !!g.talk || (video.on && video.sing && !gesture));
   updateTears(dt, !!g.tears);
   animateBearFace();
@@ -1798,7 +1925,7 @@ addEventListener('resize', resize);
 resize(); renderTabs(); renderChips();
 playClip('idle', 0); char.position.set(0, 0, 0.6); yaw = 0.15;
 status(); requestAnimationFrame(frame);
-window.__app = { video, startVideo, stopVideo, look, lead, springs, camera, cam, camD, get yaw() { return yaw; }, advance(sec) { for (let i = 0; i < Math.round(sec * 30); i++) step(1 / 30, 1 / 30); renderer.render(scene, camera); }, cmd, playGesture, setCam, act, get mode() { return mode; }, B, char, actions, setPaused };
+window.__app = { poseIK, setPoseMode, video, startVideo, stopVideo, look, lead, springs, camera, cam, camD, get yaw() { return yaw; }, advance(sec) { for (let i = 0; i < Math.round(sec * 30); i++) step(1 / 30, 1 / 30); renderer.render(scene, camera); }, cmd, playGesture, setCam, act, get mode() { return mode; }, B, char, actions, setPaused };
 </script>
 </body>
 </html>
