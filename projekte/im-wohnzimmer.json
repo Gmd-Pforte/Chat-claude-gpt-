@@ -1,0 +1,419 @@
+{
+ "app": "PS Cartoon Studio",
+ "version": 1,
+ "project": {
+  "app": "PS Cartoon Studio",
+  "version": 1,
+  "name": "Im Wohnzimmer",
+  "format": "quer",
+  "active": 0,
+  "scenes": [
+   {
+    "id": "wz1",
+    "name": "Im Wohnzimmer",
+    "duration": 35,
+    "bg": {
+     "type": "preset",
+     "id": "wohnzimmer"
+    },
+    "camera": {
+     "x": 660,
+     "y": 395,
+     "zoom": 1.12,
+     "follow": ""
+    },
+    "fx": {
+     "vignette": true,
+     "fade": true,
+     "shake": true
+    },
+    "react": false,
+    "actors": [
+     {
+      "id": "baer",
+      "name": "PS Bär",
+      "kind": "cutout",
+      "char": "baer_neu",
+      "x": 370,
+      "y": 548,
+      "scale": 0.92,
+      "flip": false,
+      "look": {
+       "height": 1,
+       "shirtColor": "#e0559c",
+       "motion": "weich"
+      },
+      "clips": [
+       {
+        "id": "w7",
+        "type": "pose",
+        "start": 0,
+        "dur": 35,
+        "speed": 1,
+        "intensity": 1,
+        "pose": {
+         "legF": 88,
+         "kneeF": 88,
+         "footF": 0,
+         "legB": 84,
+         "kneeB": 84,
+         "footB": 0,
+         "hipDrop": 0.98,
+         "torso": -3,
+         "armF": 4,
+         "elbowF": 22,
+         "armB": -4,
+         "elbowB": 22,
+         "smile": 0.5
+        }
+       },
+       {
+        "id": "w1",
+        "type": "nicken",
+        "start": 8.2,
+        "dur": 2.4,
+        "speed": 1,
+        "intensity": 1
+       },
+       {
+        "id": "w2",
+        "type": "sprechen",
+        "start": 14.3,
+        "dur": 2.8,
+        "speed": 1,
+        "intensity": 1,
+        "text": "Und ich mach die Tanzschritte!"
+       },
+       {
+        "id": "w3",
+        "type": "schuetteln",
+        "start": 17.6,
+        "dur": 1.4,
+        "speed": 1,
+        "intensity": 1
+       },
+       {
+        "id": "w4",
+        "type": "sprechen",
+        "start": 19.4,
+        "dur": 2.6,
+        "speed": 1,
+        "intensity": 1,
+        "text": "Hey! Ich hab Rhythmus im Blut!"
+       },
+       {
+        "id": "w5",
+        "type": "lachen",
+        "start": 22.4,
+        "dur": 2.2,
+        "speed": 1,
+        "intensity": 1
+       },
+       {
+        "id": "w6",
+        "type": "winken",
+        "start": 31.4,
+        "dur": 3.2,
+        "speed": 1,
+        "intensity": 1,
+        "text": "Bin dabei!"
+       }
+      ]
+     },
+     {
+      "id": "peter",
+      "name": "PS Peter",
+      "kind": "cutout",
+      "char": "peter_zt",
+      "x": 560,
+      "y": 548,
+      "scale": 0.95,
+      "flip": false,
+      "look": {
+       "height": 1,
+       "shirtColor": "#ff5fa2",
+       "motion": "weich"
+      },
+      "clips": [
+       {
+        "id": "w15",
+        "type": "pose",
+        "start": 0,
+        "dur": 35,
+        "speed": 1,
+        "intensity": 1,
+        "pose": {
+         "legF": 88,
+         "kneeF": 88,
+         "footF": 0,
+         "legB": 84,
+         "kneeB": 84,
+         "footB": 0,
+         "hipDrop": 0.98,
+         "torso": -3,
+         "armF": 4,
+         "elbowF": 22,
+         "armB": -4,
+         "elbowB": 22,
+         "smile": 0.5
+        }
+       },
+       {
+        "id": "w8",
+        "type": "winken",
+        "start": 0.6,
+        "dur": 1.6,
+        "speed": 1,
+        "intensity": 1
+       },
+       {
+        "id": "w9",
+        "type": "sprechen",
+        "start": 1.2,
+        "dur": 3.0,
+        "speed": 1,
+        "intensity": 1,
+        "text": "Leute, mein neuer Song ist fertig!"
+       },
+       {
+        "id": "w10",
+        "type": "zaehlen",
+        "start": 6.6,
+        "dur": 4.4,
+        "speed": 1,
+        "intensity": 1,
+        "text": "„EINS ZWEI DREI VIER“ ... mit 150 BPM!"
+       },
+       {
+        "id": "w11",
+        "type": "lachen",
+        "start": 22.4,
+        "dur": 2.2,
+        "speed": 1,
+        "intensity": 1
+       },
+       {
+        "id": "w12",
+        "type": "nachdenken",
+        "start": 24.8,
+        "dur": 3.6,
+        "speed": 1,
+        "intensity": 1,
+        "text": "Hmm ... wisst ihr was?"
+       },
+       {
+        "id": "w13",
+        "type": "sprechen",
+        "start": 28.6,
+        "dur": 2.8,
+        "speed": 1,
+        "intensity": 1,
+        "text": "Wir drehen das Musikvideo zusammen!"
+       },
+       {
+        "id": "w14",
+        "type": "daumen",
+        "start": 31.5,
+        "dur": 3.0,
+        "speed": 1,
+        "intensity": 1
+       }
+      ]
+     },
+     {
+      "id": "bb",
+      "name": "BreuerBeatz",
+      "kind": "cutout",
+      "char": "fb_neu",
+      "x": 760,
+      "y": 548,
+      "scale": 0.9,
+      "flip": false,
+      "look": {
+       "height": 1,
+       "shirtColor": "#ff8a1f",
+       "motion": "weich"
+      },
+      "clips": [
+       {
+        "id": "w20",
+        "type": "pose",
+        "start": 0,
+        "dur": 35,
+        "speed": 1,
+        "intensity": 1,
+        "pose": {
+         "legF": 88,
+         "kneeF": 88,
+         "footF": 0,
+         "legB": 84,
+         "kneeB": 84,
+         "footB": 0,
+         "hipDrop": 0.98,
+         "torso": -3,
+         "armF": 4,
+         "elbowF": 22,
+         "armB": -4,
+         "elbowB": 22,
+         "smile": 0.5
+        }
+       },
+       {
+        "id": "w16",
+        "type": "nicken",
+        "start": 1.8,
+        "dur": 2.2,
+        "speed": 1,
+        "intensity": 1
+       },
+       {
+        "id": "w17",
+        "type": "sprechen",
+        "start": 11.2,
+        "dur": 2.9,
+        "speed": 1,
+        "intensity": 1,
+        "text": "Da leg ich sofort einen fetten Beat drunter!"
+       },
+       {
+        "id": "w18",
+        "type": "lachen",
+        "start": 22.2,
+        "dur": 2.4,
+        "speed": 1,
+        "intensity": 1
+       },
+       {
+        "id": "w19",
+        "type": "zeigen",
+        "start": 31.3,
+        "dur": 3.2,
+        "speed": 1,
+        "intensity": 1
+       }
+      ]
+     },
+     {
+      "id": "sunny",
+      "name": "Sunny",
+      "kind": "cutout",
+      "char": "sunny_neu",
+      "x": 955,
+      "y": 548,
+      "scale": 0.88,
+      "flip": false,
+      "look": {
+       "height": 1,
+       "shirtColor": "#e8b48e",
+       "motion": "weich"
+      },
+      "clips": [
+       {
+        "id": "w26",
+        "type": "pose",
+        "start": 0,
+        "dur": 35,
+        "speed": 1,
+        "intensity": 1,
+        "pose": {
+         "legF": 88,
+         "kneeF": 88,
+         "footF": 0,
+         "legB": 84,
+         "kneeB": 84,
+         "footB": 0,
+         "hipDrop": 0.98,
+         "torso": -3,
+         "armF": 4,
+         "elbowF": 22,
+         "armB": -4,
+         "elbowB": 22,
+         "smile": 0.5
+        }
+       },
+       {
+        "id": "w21",
+        "type": "sprechen",
+        "start": 4.3,
+        "dur": 2.2,
+        "speed": 1,
+        "intensity": 1,
+        "text": "Echt jetzt? Wie heißt er?"
+       },
+       {
+        "id": "w22",
+        "type": "nicken",
+        "start": 11.6,
+        "dur": 2.4,
+        "speed": 1,
+        "intensity": 1
+       },
+       {
+        "id": "w23",
+        "type": "lachen",
+        "start": 17.2,
+        "dur": 2.1,
+        "speed": 1,
+        "intensity": 1,
+        "text": "Du und tanzen?"
+       },
+       {
+        "id": "w24",
+        "type": "lachen",
+        "start": 22.2,
+        "dur": 2.4,
+        "speed": 1,
+        "intensity": 1
+       },
+       {
+        "id": "w25",
+        "type": "peace",
+        "start": 31.2,
+        "dur": 3.3,
+        "speed": 1,
+        "intensity": 1
+       }
+      ]
+     }
+    ],
+    "props": [
+     {
+      "id": "p27",
+      "type": "sofa",
+      "x": 660,
+      "y": 640,
+      "scale": 2.05,
+      "rot": 0,
+      "flip": false,
+      "layer": "hinten",
+      "color": "#b3543f"
+     },
+     {
+      "id": "p28",
+      "type": "pflanze",
+      "x": 118,
+      "y": 630,
+      "scale": 1.15,
+      "rot": 0,
+      "flip": false,
+      "layer": "hinten",
+      "color": "#3f9a5a"
+     },
+     {
+      "id": "p29",
+      "type": "lampe",
+      "x": 1185,
+      "y": 628,
+      "scale": 1.05,
+      "rot": 0,
+      "flip": false,
+      "layer": "hinten",
+      "color": "#e8b04a"
+     }
+    ],
+    "audio": []
+   }
+  ]
+ },
+ "assets": {}
+}

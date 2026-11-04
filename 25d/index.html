@@ -254,7 +254,7 @@ details.grp summary{font:600 14px var(--display);cursor:pointer;margin-bottom:8p
 
 <script>
 'use strict';
-const APP_VERSION = '2.6';
+const APP_VERSION = '2.7';
 const STUDIO25 = true; // 2.5D-Ausgabe: nur flache Figuren, eigener Speicher
 var LIVE = null; // Live-Avatar-Zustand (siehe unten)
 /* =====================================================================
@@ -1742,10 +1742,28 @@ function renderScene(c, sc, t, clean, k) {
   const order = sc.actors.slice().sort((m, n) => (states.get(m.id).y - states.get(n.id).y) || (sc.actors.indexOf(m) - sc.actors.indexOf(n)));
   for (const a of order) { collecting = a.id === jointId; drawActor(c, a, states.get(a.id)); collecting = false; }
   for (const pr of sc.props) if (pr.layer === 'vorne') drawProp(c, pr);
+  for (const a of sc.actors) for (const cl of a.clips) if (cl.text && t >= cl.start && t <= cl.start + cl.dur) drawBubble(c, a, states.get(a.id), cl, t);
   if (!clean) { drawOverlay(c, sc, states, cam.s); lastStates = states; }
   c.restore();
   if (fx.vignette) { const m = Math.min(cam.OW, cam.OH), M = Math.max(cam.OW, cam.OH), g = c.createRadialGradient(cam.OW / 2, cam.OH / 2, m * 0.42, cam.OW / 2, cam.OH / 2, M * 0.56); g.addColorStop(0, 'rgba(20,10,30,0)'); g.addColorStop(1, 'rgba(20,10,30,.38)'); c.fillStyle = g; c.fillRect(0, 0, cam.OW, cam.OH); }
   if (fx.fade && (clean || playing)) { const al = clamp(Math.max(1 - t / 0.45, 1 - (sc.duration - t) / 0.45), 0, 1); if (al > 0) { c.fillStyle = 'rgba(8,6,12,' + al + ')'; c.fillRect(0, 0, cam.OW, cam.OH); } }
+}
+// Sprechblasen: Text an einem Block erscheint als Blase über dem Kopf
+function wrapText(c, txt, maxW) { const out = []; for (const para of String(txt).split('\n')) { let line = ''; for (const w of para.split(' ')) { const tst = line ? line + ' ' + w : w; if (c.measureText(tst).width > maxW && line) { out.push(line); line = w; } else line = tst; } out.push(line); } return out; }
+function drawBubble(c, a, st, cl, t) {
+  if (!st) return; const b = actorBox(a, st), u = clamp(Math.min((t - cl.start) / 0.18, (cl.start + cl.dur - t) / 0.18, 1), 0, 1); if (u <= 0) return;
+  c.save(); c.font = '700 25px system-ui, -apple-system, "Segoe UI", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+  const lines = wrapText(c, cl.text, 300), lh = 31, w = Math.min(340, Math.max(...lines.map(l => c.measureText(l).width)) + 40), h = lines.length * lh + 24;
+  const hx = st.x, hy = b.y0 + 6, side = cl.bubbleSide ?? (st.x > W / 2 ? -1 : 1);
+  let bx = clamp(hx + side * 40, w / 2 + 12, W - w / 2 - 12), by = hy - 46 - h / 2 - (cl.bubbleUp || 0);
+  c.translate(bx, by + (1 - u) * 14); c.scale(0.7 + 0.3 * u, 0.7 + 0.3 * u); c.globalAlpha = u;
+  const tx = hx - bx, ty = hy - by - 8;
+  c.beginPath(); c.moveTo(-w / 2 + 18, -h / 2); c.arcTo(w / 2, -h / 2, w / 2, h / 2, 18); c.arcTo(w / 2, h / 2, -w / 2, h / 2, 18);
+  const ax = clamp(tx * 0.35, -w / 2 + 30, w / 2 - 30); c.lineTo(ax + 16, h / 2); c.lineTo(tx * 0.62, ty * 0.6); c.lineTo(ax - 10, h / 2);
+  c.arcTo(-w / 2, h / 2, -w / 2, -h / 2, 18); c.arcTo(-w / 2, -h / 2, w / 2, -h / 2, 18); c.closePath();
+  c.fillStyle = '#fffdf7'; c.fill(); c.lineWidth = 5; c.strokeStyle = OUT; c.lineJoin = 'round'; c.stroke();
+  c.fillStyle = OUT; lines.forEach((l, i) => c.fillText(l, 0, -h / 2 + 12 + lh / 2 + i * lh));
+  c.restore();
 }
 function drawOverlay(c, sc, states, z) {
   c.save(); c.lineWidth = 2 / z; c.setLineDash([7 / z, 5 / z]); c.strokeStyle = '#ffd166';
@@ -2185,6 +2203,11 @@ function renderProps() {
       el('p', 'hint', 'Oder die gelbe Fahne auf der Bühne ziehen. Die Gehgeschwindigkeit ergibt sich aus Weg und Dauer – die Schritte passen sich automatisch an.')]));
     else if (c.type === 'pose') { c.pose = c.pose || {}; p.append(group('Gelenke', POSE_SLIDERS.map(([k, l, mn, mx, st]) => ctlRange(l, c.pose, k, mn, mx, st, { def: NEUTRAL[k], unit: st >= 1 ? '°' : '', idk: 'pose' })))); }
     else { if (A.loop) p.append(ctlRange('Tempo', c, 'speed', 0.3, 2.5, 0.05, { unit: '×' })); p.append(ctlRange('Stärke', c, 'intensity', 0.3, 1.6, 0.05, { unit: '×' })); }
+    { const wrap = el('label', 'ctl'); const top = el('div', 'ctl-top'); top.append(el('span', '', 'Sprechblase (Text)')); wrap.append(top);
+      const ta = document.createElement('textarea'); ta.id = 'c_bubble'; ta.rows = 2; ta.value = c.text || ''; ta.placeholder = 'Was sagt die Figur? (leer = keine Blase)';
+      ta.style.cssText = 'width:100%;box-sizing:border-box;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:9px;padding:8px;font:inherit;resize:vertical';
+      ta.addEventListener('input', () => { if (ta.value.trim()) c.text = ta.value; else delete c.text; requestRender(); }); ta.addEventListener('change', () => commit());
+      wrap.append(ta); p.append(wrap); }
     p.append(btnRow([['Zum Start springen', () => setTime(c.start)], ['Duplizieren', () => dupClip(c.id)], ['Löschen', () => delClip(c.id), 'danger']]));
     return;
   }
