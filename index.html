@@ -2202,7 +2202,7 @@ function buildMusicVideo(rx, dur, name, hoch) {
   const MOVES = [['nicken', 'tanzen', 'klatschen', 'tanzen'], ['tanzen', 'disco', 'klatschen', 'disco'], ['huepfen', 'disco', 'jubeln', 'tanzen']];
   const BG = [['kleinstadt', 'park'], ['party'], ['buehne', 'party']], seen = [0, 0, 0];
   const beatAt = t => b0 + Math.ceil((t - b0) / P - 0.001) * P, SP = Math.round(0.8 / (2 * P) * 1000) / 1000;
-  const CREW = [['sunny_neu', 190, 595, 0.9, false], ['baer_neu', 360, 630, 0.95, false], ['fb_neu', 830, 600, 0.9, false], ['ki_ps', 1000, 630, 1, true], ['tom_ps', 1110, 585, 0.95, true]].filter(c => CUTOUTS[c[0]]);
+  const CREW = [['baer_neu', 250, 630, 0.95, false], ['fb_neu', 860, 600, 0.9, false], ['sunny_neu', 1060, 598, 0.9, false], ['ki_ps', 430, 630, 1, false], ['tom_ps', 1200, 585, 0.95, true]].filter(c => CUTOUTS[c[0]]);
   const scenes = sc.map((q, si) => {
     const S = q.a, E = q.b, len = E - S, s = newScene((si + 1) + ' ' + ['Ruhiger Teil', 'Groove', 'Party-Teil'][q.lv]); s.duration = Math.round(len * 1000) / 1000;
     const bgs = BG[q.lv]; s.bg = { type: 'preset', id: bgs[seen[q.lv]++ % bgs.length] };

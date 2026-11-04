@@ -40,8 +40,7 @@ Die Wiedergabe erfolgt über GitHub Pages (`.github/workflows/static.yml`), soba
 
 Unter **/25d/** (oder über den Knopf **2.5D** im Studio) läuft die 2.5D-Ausgabe des Studios. Sie kann alles, was das 2D-Studio kann (Zeitleiste, Szenen, Audio mit Mundbewegung, MP4-Export, Hochkant, Handy-Ansicht), mit eigenem Projektspeicher.
 
-- Neue 2.5D-Figuren aus eigenen Teilebögen: **PS Peter**, **Freuerbeatz**, **Sunny** und **PS Bär** (Bögen in `figuren/*-neu/`).
-- Alle gezeichneten Figuren (PS Peter, PS Peter klassisch, PS Bär, Sunny, Tom, KI-Mitbewohner, Freuerbeatz, PS Peter 3D) bewegen sich im **flachen 2.5D-Stil** (Körper wippt und kippt, Stummelbeine, fast gerade Arme, bleiben frontal). Pro Figur umschaltbar unter **Bewegungsstil**. Die klassischen Editor-Figuren Mensch und Bär sind auch dabei.
+- Figuren: nur noch die neuen 2.5D-Figuren **PS Peter**, **Freuerbeatz**, **Sunny** und **PS Bär** (Bögen in `figuren/*-neu/`), alle im flachen 2.5D-Stil. Weitere Figuren kommen nach und nach dazu.
 - **Musikvideo per Knopf:** Datei ▾ → „Musikvideo EINS ZWEI DREI VIER“, Song auswählen – es entstehen 7 Szenen (Kleinstadt, Party mit der ganzen Crew inkl. Freuerbeatz, Bühne) im Takt von 152 BPM, quer oder hochkant. Der Song liegt nicht im Repo.
 - Startet mit dem Beispiel „Peter 2.5D“ (Kleinstadt + Party).
 
