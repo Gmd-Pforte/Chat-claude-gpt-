@@ -778,40 +778,76 @@ function legIK(P, n, hip, foot, pitch, toe) {
 }
 const hipJ = (hips, s) => [hips[0] + s * HX, hips[1] - 0.05, hips[2]];
 // Fußbahn eines Schritts (Phase 0..1): Standphase linear nach hinten (kein Rutschen), Schwungphase im Bogen nach vorne
+// Natürlichere Schrittphasen: Fuß bleibt in der Standphase am Boden,
+// hebt in der Schwungphase bogenförmig ab und rollt über Ballen/Zehen ab.
+// Alle Größen sind Modell-Einheiten, nicht Pixel.
 function footCycle(p, o) {
-  if (p < o.st) {
-    const s = p / o.st; let y = ANKLE, pitch = 0, toe = 0;
-    if (s < 0.15) pitch = -0.25 * (1 - s / 0.15);
-    if (s > 0.7) { const k = (s - 0.7) / 0.3; pitch = 0.55 * k; toe = 0.55 * k; y += 0.06 * k * k; }
-    return { z: o.S / 2 - o.S * s, y, pitch, toe };
+  if (!o.natural) {
+    if (p < o.st) {
+      const s = p / o.st; let y = ANKLE, pitch = 0, toe = 0;
+      if (s < 0.15) pitch = -0.25 * (1 - s / 0.15);
+      if (s > 0.7) { const k = (s - 0.7) / 0.3; pitch = 0.55 * k; toe = 0.55 * k; y += 0.06 * k * k; }
+      return { z: o.S / 2 - o.S * s, y, pitch, toe };
+    }
+    const s = (p - o.st) / (1 - o.st), e = 0.5 - 0.5 * Math.cos(Math.PI * s);
+    return { z: -o.S / 2 + o.S * e, y: ANKLE + o.h * Math.sin(Math.PI * s) + 0.06 * (1 - s) * (1 - s), pitch: 0.55 * (1 - s) * (1 - s) - 0.25 * s * s, toe: 0.55 * (1 - s) * (1 - s) };
   }
-  const s = (p - o.st) / (1 - o.st), e = 0.5 - 0.5 * Math.cos(Math.PI * s);
-  return { z: -o.S / 2 + o.S * e, y: ANKLE + o.h * Math.sin(Math.PI * s) + 0.06 * (1 - s) * (1 - s), pitch: 0.55 * (1 - s) * (1 - s) - 0.25 * s * s, toe: 0.55 * (1 - s) * (1 - s) };
+  if (p < o.st) {
+    const s = p / o.st;
+    const heel = 1 - sstep(0.02, 0.16, s);
+    const push = sstep(0.76, 0.99, s);
+    return {
+      z: o.S * (0.5 - s), y: ANKLE + 0.018 * push * push,
+      pitch: -0.13 * heel + 0.34 * push,
+      toe: 0.43 * push
+    };
+  }
+  const s = (p - o.st) / (1 - o.st);
+  const smooth = s * s * (3 - 2 * s);
+  const lift = Math.sin(Math.PI * s);
+  return {
+    z: o.S * (smooth - 0.5),
+    y: ANKLE + o.h * Math.pow(Math.max(0, lift), 1.15),
+    pitch: 0.24 * (1 - s) - 0.18 * s,
+    toe: 0.23 * (1 - s) * (1 - s)
+  };
 }
 const GAIT = {
-  walk: { S: 0.38, st: 0.6, h: 0.07, T: 0.95, base: 0.607, bob: 0.02, low: 0, sway: 0.018, swing: 0.42, elbow: 0.25, lean: 0.05, twist: 0.1 },
+  // Zwei Bodenkontakte pro Zyklus, abwechselnde Gewichtsverlagerung und kleiner
+  // gegengleicher Schulter-Gegenschwung. Nur walk wird neu abgestimmt.
+  walk: { S: 0.33, st: 0.64, h: 0.085, T: 0.99, base: 0.617, bob: 0.016, low: 0, sway: 0.014, swing: 0.36, elbow: 0.36, lean: 0.035, twist: 0.085, natural: true },
   run: { S: 0.48, st: 0.4, h: 0.17, T: 0.6, base: 0.552, bob: -0.03, low: 0.2, sway: 0.012, swing: 0.85, elbow: 1.35, lean: 0.2, twist: 0.16, fist: true },
   turn: { S: 0, st: 0.5, h: 0.06, T: 0.7, base: 0.61, bob: 0.01, low: 0, sway: 0.02, swing: 0.12, elbow: 0.25, lean: 0.02, twist: 0.04 }
 };
 for (const k in GAIT) GAIT[k].v = GAIT[k].S / (GAIT[k].st * GAIT[k].T);
 function sampleGait(u, o) {
   const P = rest();
-  const hips = [o.sway * Math.sin(TAU * u), o.base - o.bob * (0.5 + 0.5 * Math.cos(2 * TAU * (u - o.low))), 0];
-  const ph = {};
+  const gaitPhase = TAU * u, transfer = Math.sin(gaitPhase);
+  const doubleStep = 0.5 + 0.5 * Math.cos(2 * gaitPhase);
+  const weight = o.natural ? 0.012 * transfer : o.sway * transfer;
+  const rise = o.natural ? o.base + 0.008 * doubleStep : o.base - o.bob * (0.5 + 0.5 * Math.cos(2 * TAU * (u - o.low)));
+  const hips = [weight, rise, 0];
   for (const [n, s] of SIDES) {
-    const p = n === 'L' ? u : (u + 0.5) % 1; const f = footCycle(p, o); ph[n] = f;
+    const p = n === 'L' ? u : (u + 0.5) % 1;
+    const f = footCycle(p, o);
     legIK(P, n, hipJ(hips, s), [s * FX, f.y, f.z], f.pitch, f.toe);
   }
-  // Arme gegengleich zu den Beinen, Ellbogen beugen sich beim Vorschwingen stärker
   for (const [n, s] of SIDES) {
-    const fwd = (n === 'L' ? -1 : 1) * Math.cos(TAU * u) * o.swing;
-    P['upperArm' + n] = [-fwd * 0.8, 0, s * (0.14 + o.swing * 0.04)];
-    P['foreArm' + n] = [-(o.elbow + 0.25 * Math.max(0, fwd)), 0, 0];
+    const fwd = (n === 'L' ? -1 : 1) * Math.cos(gaitPhase) * o.swing;
+    P['upperArm' + n] = [-fwd * 0.75 - (o.natural ? 0.04 : 0), 0, s * (0.14 + o.swing * 0.04)];
+    P['foreArm' + n] = [-(o.elbow + 0.23 * Math.max(0, fwd)), 0, 0];
+    if (o.natural) {
+      P['shoulder' + n] = [0.012 * Math.sin(gaitPhase + (n === 'L' ? 0 : Math.PI)), 0, s * 0.02 * transfer];
+      P['hand' + n] = [0.04 * Math.sin(gaitPhase + (n === 'L' ? 1 : 1 + Math.PI)), 0, 0];
+    }
     if (o.fist) { P['fingers' + n] = [0, 0, -s * 1.3]; P['index' + n] = [0, 0, -s * 1.2]; P['thumb' + n] = [0, 0, -s * 0.9]; }
   }
-  const tw = o.twist * Math.cos(TAU * u);
-  P.spine = [o.lean * 0.5, -tw * 0.4, 0]; P.chest = [o.lean * 0.5 + 0.01 * Math.sin(2 * TAU * u), tw, -hips[0] * 1.2];
-  P.neck = [-o.lean * 0.6, -tw * 0.5, 0]; P.head = [-o.lean * 0.3 + 0.02 * Math.sin(2 * TAU * u + 1), -tw * 0.3, 0];
+  const tw = o.twist * Math.cos(gaitPhase);
+  const breathing = o.natural ? 0.013 * Math.sin(gaitPhase + 0.5) : 0;
+  P.spine = [o.lean * 0.5 + breathing, -tw * 0.3, o.natural ? -weight * 1.6 : 0];
+  P.chest = [o.lean * 0.5 + 0.01 * Math.sin(2 * gaitPhase), tw, -hips[0] * 1.2];
+  P.neck = [-o.lean * 0.6 - breathing * 0.5, -tw * 0.55, o.natural ? weight * 0.5 : 0];
+  P.head = [-o.lean * 0.3 + 0.017 * Math.sin(2 * gaitPhase + 1), -tw * 0.22, o.natural ? 0.012 * transfer : 0];
   return { P, hips };
 }
 function sampleIdle(u) {
