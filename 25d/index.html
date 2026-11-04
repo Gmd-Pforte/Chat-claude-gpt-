@@ -252,7 +252,7 @@ details.grp summary{font:600 14px var(--display);cursor:pointer;margin-bottom:8p
 
 <script>
 'use strict';
-const APP_VERSION = '1.3';
+const APP_VERSION = '1.4';
 const STUDIO25 = true; // 2.5D-Ausgabe: nur flache Figuren, eigener Speicher
 /* =====================================================================
    PS Cartoon Studio 1.0
@@ -405,7 +405,8 @@ function evalActor(sc, a, t) {
   const h = hashId(a.id), p = Object.assign({}, NEUTRAL), R = rig(a);
   const br = Math.sin(t * 2.1 + h); // Atmen
   p.torso += br * 0.7; p.armF += br * 1.6; p.armB -= br * 1.3; p.head -= br * 0.6;
-  let x = a.x, y = a.y, facing = a.flip ? -1 : 1, ctrl = null;
+  let x = a.x, y = a.y, facing = a.flip ? -1 : 1, ctrl = null, busy = 0;
+  const mu = a.look && a.look.react === false ? null : musicAt(sc, t);
   const clips = a.clips.slice().sort((m, n) => m.start - n.start);
   for (const c of clips) {
     const A = ANIMS[c.type]; if (!A || !A.move) continue;
@@ -417,19 +418,27 @@ function evalActor(sc, a, t) {
       const u0 = (t - c.start) / c.dur, u = u0 + (smooth(u0) - u0) * 0.4; x = fx + dx * u; y = fy + (ty - fy) * u;
       const dist = Math.hypot(dx, ty - fy) * u;
       const stride = A.stride * a.scale * (a.look.height || 1) * ((R.thigh + R.shin) / 102);
-      blend(p, walkPose(dist / stride, A.run), fadeW(c, t, 0.2, 0.2));
+      const ww = fadeW(c, t, 0.2, 0.2); busy = Math.max(busy, ww); blend(p, walkPose(dist / stride, A.run), ww);
     }
   }
   for (const c of clips) {
     const A = ANIMS[c.type]; if (!A || A.move) continue;
     if (t < c.start || t > c.start + c.dur) continue;
     const w = fadeW(c, t, A.fadeIn ?? 0.25, A.fadeOut ?? 0.25); if (w <= 0) continue;
-    const lt = (t - c.start) * (c.speed || 1), tgt = {};
+    let lt = (t - c.start) * (c.speed || 1); const tgt = {}, dance = DANCES.has(c.type) && A.loop;
+    if (mu && dance && c.sync !== false) lt = Math.max(0, mu.beat) * 0.4;   // im Takt: Tanzschleife sitzt auf den Beats
+    if (dance) busy = Math.max(busy, w);
     if (c.type === 'pose') Object.assign(tgt, c.pose || {});
     else for (const k in A.keys) tgt[k] = A.loop ? sampleKeys(A.keys[k], lt / A.len, true) : sampleKeys(A.keys[k], lt, false);
-    const inten = c.intensity ?? 1;
+    const inten = (c.intensity ?? 1) * (mu && dance ? 0.6 + 0.6 * clamp(mu.e, 0, 1) : 1);
     if (inten !== 1) for (const k in tgt) { const n = NEUTRAL[k]; if (n !== undefined) tgt[k] = n + (tgt[k] - n) * inten; }
     blend(p, tgt, w);
+  }
+  // Mitwippen: Figuren ohne Tanz/Gehen grooven zur Musik (Beat, Lautstärke, Bass)
+  if (mu) {
+    const g = smooth(clamp((mu.e - 0.12) / 0.55, 0, 1)) * (1 - busy) * (a.look.groove ?? 1), pulse = Math.exp(-mu.ph * 5), side = (Math.floor(mu.beat) & 1) ? 1 : -1;
+    if (g > 0.01) { p.bob += g * (9 * pulse + mu.kick * 5); p.head += g * (8 * pulse - 2.5); p.torso += g * side * 3.5 * Math.sin(mu.ph * Math.PI);
+      p.armF += g * 7 * pulse; p.armB -= g * 7 * pulse; p.elbowF += g * 10 * pulse; p.elbowB += g * 10 * pulse; if (p.shiftX !== undefined) p.shiftX += g * side * 3 * Math.sin(mu.ph * Math.PI); }
   }
   // Lippensynchronisation aus zugeordneten Audiospuren (lautstärkeabhängig)
   for (const au of sc.audio) {
@@ -1382,10 +1391,48 @@ function analyze(buf) {
   const out = new Float32Array(n); for (let i = 0; i < n; i++) out[i] = Math.min(1, ((env[i - 1] || 0) + 2 * env[i] + (env[i + 1] || 0)) / 4 / (ref || 1));
   return out;
 }
+// Musik-Analyse: Tempo (BPM), Taktschläge, Lautstärke-Verlauf und Bass-Schläge
+const RX_RATE = 100;
+function musicAnalyze(buf) {
+  const sr = buf.sampleRate, chs = []; for (let i = 0; i < Math.min(2, buf.numberOfChannels); i++) chs.push(buf.getChannelData(i));
+  const hop = Math.floor(sr / RX_RATE), n = Math.floor(chs[0].length / hop); if (n < RX_RATE * 8) return null;
+  const al = 1 - Math.exp(-2 * Math.PI * 140 / sr); let lp = 0;
+  const bass = new Float32Array(n), full = new Float32Array(n);
+  for (let i = 0; i < n; i++) { let sb = 0, sf = 0; const s0 = i * hop;
+    for (let j = s0; j < s0 + hop; j++) { const v = chs.length > 1 ? (chs[0][j] + chs[1][j]) * 0.5 : chs[0][j]; lp += al * (v - lp); sb += lp * lp; sf += v * v; }
+    bass[i] = Math.sqrt(sb / hop); full[i] = Math.sqrt(sf / hop); }
+  const on = new Float32Array(n);
+  for (let i = 1; i < n; i++) on[i] = Math.max(0, Math.log(bass[i] + 1e-3) - Math.log(bass[i - 1] + 1e-3)) + 0.5 * Math.max(0, Math.log(full[i] + 1e-3) - Math.log(full[i - 1] + 1e-3));
+  let mean = 0; for (let i = 0; i < n; i++) mean += on[i]; mean /= n; const oc = new Float32Array(n); for (let i = 0; i < n; i++) oc[i] = on[i] - mean;
+  const acf = L => { const Li = Math.floor(L), fr = L - Li; let s = 0; for (let i = 0; i + Li + 1 < n; i++) s += oc[i] * (oc[i + Li] * (1 - fr) + oc[i + Li + 1] * fr); return s; };
+  let best = -Infinity, bpm = 120;
+  for (let b = 70; b <= 190; b += 0.25) { const L = 60 * RX_RATE / b; const sc = (acf(L) + 0.5 * acf(2 * L)) * Math.exp(-0.5 * Math.pow(Math.log2(b / 125) / 1.0, 2)); if (sc > best) { best = sc; bpm = b; } }
+  // Feinabstimmung: Tempo und Phase so wählen, dass das Taktraster über den ganzen Song auf den Schlägen liegt
+  const comb = (P, ph) => { let s = 0; for (let k = ph; k < n - 1; k += P) { const i = Math.round(k); s += on[i] + 0.5 * (on[i - 1] || 0) + 0.5 * on[i + 1]; } return s; };
+  let bph = 0, bs = -1;
+  for (let b = bpm - 3; b <= bpm + 3; b += 0.05) { const P = 60 * RX_RATE / b; for (let ph = 0; ph < P; ph += 1) { const s = comb(P, ph); if (s > bs) { bs = s; bph = ph; bpm = b; } } }
+  { const P = 60 * RX_RATE / bpm; for (let ph = bph - 1; ph <= bph + 1; ph += 0.25) { const s = comb(P, ph); if (s > bs) { bs = s; bph = ph; } } }
+  bph = ((bph % (60 * RX_RATE / bpm)) + 60 * RX_RATE / bpm) % (60 * RX_RATE / bpm); bpm = Math.round(bpm * 100) / 100;
+  const pct = (arr, q) => { const a = Array.from(arr).sort((x, y) => x - y); return a[Math.floor(a.length * q)] || 1; };
+  const energy = new Float32Array(n), W = Math.round(RX_RATE * 0.4); let acc = 0;
+  for (let i = 0; i < n + W; i++) { if (i < n) acc += full[i]; if (i - 2 * W - 1 >= 0) acc -= full[i - 2 * W - 1]; const c = i - W; if (c >= 0 && c < n) energy[c] = acc / (Math.min(n - 1, i) - Math.max(0, i - 2 * W) + 1); }
+  const eRef = pct(energy, 0.95) || 1; for (let i = 0; i < n; i++) energy[i] = Math.min(1.2, energy[i] / eRef);
+  const kRef = pct(on, 0.985) || 1, kick = new Float32Array(n); for (let i = 0; i < n; i++) kick[i] = Math.min(1, on[i] / kRef);
+  return { bpm, period: 60 / bpm, beat0: bph / RX_RATE, energy, kick, rate: RX_RATE };
+}
+// Musikzustand einer Szene zum Zeitpunkt t (Taktposition, Lautstärke, Bass-Schlag)
+function musicAt(sc, t) {
+  if (!sc || sc.react === false) return null;
+  for (const au of sc.audio) { const inf = audioCache[au.asset]; if (!inf || !inf.rx) continue; const lt = t - au.start; if (lt < 0 || lt > inf.duration) continue;
+    const r = inf.rx, i = Math.min(r.energy.length - 1, Math.floor(lt * r.rate)), beat = (lt - r.beat0) / r.period; let k = 0;
+    for (let j = Math.max(0, i - 4); j <= i; j++) k = Math.max(k, r.kick[j]);
+    return { beat, ph: ((beat % 1) + 1) % 1, e: r.energy[i], kick: k, bpm: r.bpm }; }
+  return null;
+}
 async function decodeAsset(id, arrayBuf) {
   const ac = getAC(); const ab = arrayBuf ? arrayBuf.slice(0) : b64ToBuf(assets[id].data);
   const buffer = await new Promise((res, rej) => { const pr = ac.decodeAudioData(ab, res, rej); if (pr && pr.then) pr.then(res, rej); });
-  audioCache[id] = { buffer, duration: buffer.duration, env: analyze(buffer) };
+  audioCache[id] = { buffer, duration: buffer.duration, env: analyze(buffer), rx: buffer.duration > 12 ? musicAnalyze(buffer) : null };
 }
 function stopSources() { for (const s of sources) { try { s.stop(); } catch (e) {} } sources = []; }
 function scheduleAudio(fromT, whenCtx) {
@@ -1860,6 +1907,8 @@ function renderProps() {
       ctlRange('Dauer', sc, 'duration', 1, Math.max(60, Math.ceil(sc.duration)), 0.5, { unit: ' s', onInput: () => { time = Math.min(time, sc.duration); renderTimeline(); } }),
       group('Kamera', [ctlSelect('Kamera folgt', sc.camera, 'follow', [['', 'Niemandem (feste Kamera)'], ...sc.actors.map(a => [a.id, a.name])]), ctlRange('Zoom', sc.camera, 'zoom', 1, 3, 0.05, { unit: '×' }), ctlRange('Ausschnitt links/rechts', sc.camera, 'x', 0, W, 1), ctlRange('Ausschnitt oben/unten', sc.camera, 'y', 0, H, 1),
         btnRow([['Kamera zurücksetzen', () => { sc.camera = { x: W / 2, y: H / 2, zoom: 1 }; commit(); renderProps(); requestRender(); }]])]),
+      group('Musik', [(sc.react = sc.react !== false, ctlCheck('Figuren reagieren auf die Musik', sc, 'react')),
+        el('p', 'hint', (() => { const r = sc.audio.map(au => audioCache[au.asset] && audioCache[au.asset].rx).find(Boolean); return r ? 'Erkannt: ' + Math.round(r.bpm) + ' BPM. Figuren wippen im Takt, Tänze sitzen auf dem Beat, laute Stellen werden wilder.' : 'Füge einen Song hinzu – die Figuren wippen dann im Takt mit und tanzen auf dem Beat.'; })())]),
       group('Zeichentrick-Effekte', [(sc.fx = fxOf(sc), ctlCheck('Vignette (dunkle Bildränder)', sc.fx, 'vignette')), ctlCheck('Ein- und Ausblenden', sc.fx, 'fade'), ctlCheck('Kamerawackeln beim Erschrecken', sc.fx, 'shake'),
         el('p', 'hint', 'Das Ein- und Ausblenden siehst du beim Abspielen und im Video. Beim Bearbeiten bleibt das Bild hell.')]),
       el('p', 'hint', 'Tippe auf eine Figur, einen Gegenstand oder einen Block in der Zeitleiste, um ihn zu bearbeiten.'));
@@ -1869,7 +1918,7 @@ function renderProps() {
     const a = findActor(sel.id), L = a.look, bear = a.kind === 'bear', rerender = () => { renderProps(); };
     p.append(title(a.name, a.kind === 'cutout' ? 'Gezeichnet' : bear ? 'Bär' : 'Mensch'), ctlText('Name', a, 'name'),
       group('Platzierung', [ctlRange('Startposition X', a, 'x', 0, W, 1), ctlRange('Startposition Y (Tiefe)', a, 'y', 300, H + 40, 1), ctlRange('Größe auf der Bühne', a, 'scale', 0.3, 2.5, 0.01, { unit: '×' }),
-        ctlCheck('Schaut nach links', a, 'flip'), ctlCheck('Gelenke anzeigen', ui, 'showJoints', { noCommit: true }),
+        ctlCheck('Schaut nach links', a, 'flip'), (a.look.react = a.look.react !== false, ctlCheck('Reagiert auf Musik', a.look, 'react')), ctlCheck('Gelenke anzeigen', ui, 'showJoints', { noCommit: true }),
         btnRow([['Duplizieren', () => dupActor(a)], ['Nach vorne', () => reorder(sc.actors, a, 1)], ['Nach hinten', () => reorder(sc.actors, a, -1)], ['Löschen', () => delActor(a), 'danger']])]));
     if (a.kind === 'cutout') { a.view = a.view || 'auto'; const CF = CUTOUTS[a.char] || {}; if (CF.flat) { L.motion = L.motion || 'flach'; } p.append(group('Figur', [ctlRange('Körpergröße', L, 'height', 0.6, 1.5, 0.01, { unit: '×' }), ctlSelect('Ansicht', a, 'view', [['auto', 'Automatisch (schräg beim Gehen und Reden)'], ['front', 'Immer von vorne'], ['schraeg', 'Immer schräg']]), ...(CF.flat ? [ctlSelect('Bewegungsstil', L, 'motion', [['flach', '2.5D flach (watscheln, trippeln)'], ['gelenk', 'Mit Gelenken (Knie, Ellbogen)']])] : []), el('p', 'hint', 'Diese Figur ist aus deinem gezeichneten Teilebogen gebaut. Aussehen ändern: neuen Teilebogen erstellen.')])); return; }
     p.append(group('Körper', [ctlRange('Körpergröße', L, 'height', 0.75, 1.3, 0.01, { unit: '×' }), ctlRange('Statur', L, 'build', 0.75, 1.4, 0.01, { unit: '×' }),
@@ -2152,6 +2201,52 @@ $('#bExport').addEventListener('click', e => {
   const r = e.currentTarget.getBoundingClientRect();
   showMenu(r.left, r.bottom + 6, fileItems());
 });
+// ---------- Automatisches Musikvideo aus jedem Song ----------
+// Analysiert Tempo und Lautstärke, teilt den Song in Abschnitte (ruhig / mittel / laut) und baut daraus Szenen mit Choreografie im Takt.
+function buildMusicVideo(rx, dur, name, hoch) {
+  const P = rx.period, chunk = 32 * P, b0 = rx.beat0, eAt = t => rx.energy[Math.min(rx.energy.length - 1, Math.max(0, Math.floor(t * rx.rate)))];
+  const cuts = [0]; for (let t = b0 + chunk; t < dur - chunk * 0.5; t += chunk) cuts.push(t); cuts.push(dur);
+  let parts = []; for (let i = 0; i < cuts.length - 1; i++) { let s = 0, c = 0; for (let t = cuts[i]; t < cuts[i + 1]; t += 0.1) { s += eAt(t); c++; } parts.push({ a: cuts[i], b: cuts[i + 1], e: s / c }); }
+  const em = Math.max(...parts.map(q => q.e)) || 1; parts.forEach(q => { const r = q.e / em; q.lv = r < 0.55 ? 0 : r < 0.8 ? 1 : 2; });
+  const sc = []; for (const q of parts) { const l = sc[sc.length - 1]; if (l && l.lv === q.lv && q.b - l.a < 50) l.b = q.b; else sc.push({ a: q.a, b: q.b, lv: q.lv }); }
+  const MOVES = [['nicken', 'tanzen', 'klatschen', 'tanzen'], ['tanzen', 'disco', 'klatschen', 'disco'], ['huepfen', 'disco', 'jubeln', 'tanzen']];
+  const BG = [['kleinstadt', 'park'], ['party'], ['buehne', 'party']], seen = [0, 0, 0];
+  const beatAt = t => b0 + Math.ceil((t - b0) / P - 0.001) * P, SP = Math.round(0.8 / (2 * P) * 1000) / 1000;
+  const CREW = [['sunny_neu', 190, 595, 0.9, false], ['baer_neu', 360, 630, 0.95, false], ['fb_neu', 830, 600, 0.9, false], ['ki_ps', 1000, 630, 1, true], ['tom_ps', 1110, 585, 0.95, true]].filter(c => CUTOUTS[c[0]]);
+  const scenes = sc.map((q, si) => {
+    const S = q.a, E = q.b, len = E - S, s = newScene((si + 1) + ' ' + ['Ruhiger Teil', 'Groove', 'Party-Teil'][q.lv]); s.duration = Math.round(len * 1000) / 1000;
+    const bgs = BG[q.lv]; s.bg = { type: 'preset', id: bgs[seen[q.lv]++ % bgs.length] };
+    const crew = s.bg.id === 'party';
+    const pet = newCutout(CUTOUTS.peter_neu ? 'peter_neu' : Object.keys(CUTOUTS)[0]); pet.x = 640; pet.y = 640; pet.scale = 1.15; pet.look.motion = 'flach';
+    const fill = (a, moves, off, from, inten) => { let t = beatAt(S + from) - S, i = off; while (t < len - 0.5) { const d = Math.min(8 * P, len - 0.05 - t); if (d < 1) break; a.clips.push(clip(moves[i % moves.length], Math.round(t * 1000) / 1000, Math.round(d * 1000) / 1000, { speed: SP, intensity: inten })); t += 8 * P; i++; } };
+    let start = 0;
+    if (si === 0) { pet.x = -120; const w = Math.min(4, len * 0.4); pet.clips.push(clip('gehen', 0, w, { toX: 640, toY: 640 }), clip('winken', w + 0.1, Math.min(2.2, len - w - 0.2))); start = w + 2.4; }
+    fill(pet, MOVES[q.lv], si, start, q.lv ? 1 : 0.75);
+    if (si === sc.length - 1 && len > 4) { const last = pet.clips[pet.clips.length - 1]; if (last && last.type !== 'gehen') last.dur = Math.max(0.5, Math.min(last.dur, len - 2.6 - last.start)); pet.clips.push(clip('winken', len - 2.5, 2.4)); }
+    s.actors.push(pet);
+    if (crew) CREW.forEach(([id, x, y, k, fl], ci) => { const a = newCutout(id); a.x = x; a.y = y; a.scale = k; a.flip = fl; a.look.motion = 'flach'; fill(a, MOVES[Math.max(1, q.lv)], ci + 1, 0, 0.9); s.actors.unshift(a); });
+    s.camera = crew ? { x: W / 2, y: 380, zoom: 1, follow: '' } : { x: W / 2, y: q.lv === 2 ? 380 : 400, zoom: q.lv === 2 ? 1.55 : 1.35, follow: pet.id };
+    if (hoch) { s.camera.zoom = Math.max(1, Math.round(s.camera.zoom * 80) / 100); s.camera.y = 440; s.camera.follow = pet.id; }
+    s.audio.push({ id: uid(), asset: 'song1', start: -S, volume: 1, sens: 1, actor: pet.id });
+    return s;
+  });
+  return { app: 'PS Cartoon Studio', version: 1, name: name + ' – Musikvideo', format: hoch ? 'hoch' : 'quer', active: 0, scenes };
+}
+function autoMusicVideo(hoch) {
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'audio/*,.mp3,.wav';
+  inp.addEventListener('change', async () => {
+    const f = inp.files[0]; if (!f) return; toast('Song wird analysiert …');
+    try {
+      const data = await fileToDataURL(f), ab = await f.arrayBuffer(), ac = getAC();
+      const buffer = await new Promise((res, rej) => { const pr = ac.decodeAudioData(ab, res, rej); if (pr && pr.then) pr.then(res, rej); });
+      const rx = musicAnalyze(buffer); if (!rx) { toast('Der Song ist zu kurz für ein Musikvideo.'); return; }
+      const name = f.name.replace(/\.[^.]+$/, ''), pr = buildMusicVideo(rx, buffer.duration, name, hoch);
+      await loadData({ project: pr, assets: { song1: { type: 'audio', name, mime: f.type || 'audio/mpeg', data } } });
+      ui.film = true; renderAll(); toast('Musikvideo fertig: ' + Math.round(rx.bpm) + ' BPM, ' + pr.scenes.length + ' Szenen – Abspielen drücken!');
+    } catch (e) { console.error(e); toast('Der Song konnte nicht gelesen werden.'); }
+  });
+  inp.click();
+}
 const MV_TEMPLATE = {"app": "PS Cartoon Studio", "version": 1, "name": "EINS ZWEI DREI VIER – 2.5D", "format": "quer", "active": 0, "scenes": [{"id": "sc0", "name": "1 Intro – Ankunft", "duration": 12, "bg": {"type": "preset", "id": "kleinstadt"}, "camera": {"x": 640, "y": 400, "zoom": 1.35, "follow": "pn"}, "fx": {"vignette": true, "fade": true, "shake": true}, "props": [], "audio": [{"id": "au0", "asset": "song1", "start": 0, "volume": 1, "sens": 1, "actor": "pn"}], "actors": [{"id": "pn", "name": "PS Peter", "kind": "cutout", "char": "peter_neu", "x": -120, "y": 640, "scale": 1.15, "flip": false, "look": {"height": 1, "shirtColor": "#ff5fa2", "motion": "flach"}, "clips": [{"id": "c1", "type": "gehen", "start": 0, "dur": 4.322, "speed": 1, "intensity": 1, "toX": 620, "toY": 640}, {"id": "c2", "type": "winken", "start": 4.322, "dur": 2.369, "speed": 1, "intensity": 1}, {"id": "c3", "type": "tanzen", "start": 6.691, "dur": 5.131, "speed": 1.013, "intensity": 1}]}]}, {"id": "sc12", "name": "2 Strophe – Party", "duration": 40, "bg": {"type": "preset", "id": "party"}, "camera": {"x": 640, "y": 380, "zoom": 1.0, "follow": ""}, "fx": {"vignette": true, "fade": true, "shake": true}, "props": [], "audio": [{"id": "au12", "asset": "song1", "start": -12, "volume": 1, "sens": 1, "actor": "pn"}], "actors": [{"id": "ki", "name": "KI-Mitbewohner", "kind": "cutout", "char": "ki_ps", "x": 1000, "y": 630, "scale": 1, "flip": true, "look": {"height": 1, "shirtColor": "#1f8f8c", "motion": "flach"}, "clips": [{"id": "kic5212", "type": "disco", "start": 0, "dur": 27.849, "speed": 1.013, "intensity": 1}, {"id": "kic5312", "type": "nicken", "start": 27.849, "dur": 6.315, "speed": 1, "intensity": 1}, {"id": "kic5412", "type": "tanzen", "start": 34.164, "dur": 5.786, "speed": 1.013, "intensity": 1}]}, {"id": "baer", "name": "PS Bär", "kind": "cutout", "char": "baer_neu", "x": 360, "y": 630, "scale": 0.95, "flip": false, "look": {"height": 1, "shirtColor": "#e0559c", "motion": "flach"}, "clips": [{"id": "baerc3212", "type": "tanzen", "start": 0, "dur": 17.98, "speed": 1.013, "intensity": 1}, {"id": "baerc3312", "type": "lachen", "start": 17.98, "dur": 1.974, "speed": 1, "intensity": 1}, {"id": "baerc3412", "type": "disco", "start": 19.954, "dur": 19.996, "speed": 1.013, "intensity": 1}]}, {"id": "fb", "name": "Freuerbeatz", "kind": "cutout", "char": "fb_neu", "x": 830, "y": 600, "scale": 0.9, "flip": false, "look": {"height": 1, "shirtColor": "#ff8a1f", "motion": "flach"}, "clips": [{"id": "fbfbc8512", "type": "nicken", "start": 0, "dur": 0.612, "speed": 1, "intensity": 1}, {"id": "fbfbc8612", "type": "disco", "start": 0.612, "dur": 20.132, "speed": 1.013, "intensity": 0.9}, {"id": "fbfbc8712", "type": "tanzen", "start": 20.744, "dur": 19.206, "speed": 1.013, "intensity": 0.9}]}, {"id": "tom", "name": "Tom", "kind": "cutout", "char": "tom_ps", "x": 1110, "y": 585, "scale": 0.95, "flip": true, "look": {"height": 1, "shirtColor": "#ffc21a", "motion": "flach"}, "clips": [{"id": "tomc8612", "type": "disco", "start": 0, "dur": 19.954, "speed": 1.013, "intensity": 0.9}, {"id": "tomc8712", "type": "tanzen", "start": 19.954, "dur": 19.996, "speed": 1.013, "intensity": 0.9}]}, {"id": "lena", "name": "Sunny", "kind": "cutout", "char": "sunny_neu", "x": 190, "y": 585, "scale": 0.9, "flip": false, "look": {"height": 1, "shirtColor": "#e8b48e", "motion": "flach"}, "clips": [{"id": "lenac7212", "type": "tanzen", "start": 0, "dur": 19.954, "speed": 1.013, "intensity": 0.85}, {"id": "lenac7312", "type": "disco", "start": 19.954, "dur": 19.996, "speed": 1.013, "intensity": 1}]}, {"id": "pn", "name": "PS Peter", "kind": "cutout", "char": "peter_neu", "x": 640, "y": 640, "scale": 1.15, "flip": false, "look": {"height": 1, "shirtColor": "#ff5fa2", "motion": "flach"}, "clips": [{"id": "c4", "type": "tanzen", "start": 0, "dur": 10.086, "speed": 1.013, "intensity": 0.7}, {"id": "c5", "type": "nicken", "start": 10.086, "dur": 3.947, "speed": 1, "intensity": 1}, {"id": "c6", "type": "tanzen", "start": 14.033, "dur": 5.921, "speed": 1.013, "intensity": 0.8}, {"id": "c7", "type": "disco", "start": 19.954, "dur": 12.237, "speed": 1.013, "intensity": 0.8}, {"id": "c8", "type": "zeigen", "start": 32.191, "dur": 1.973, "speed": 1, "intensity": 1}, {"id": "c9", "type": "disco", "start": 34.164, "dur": 5.786, "speed": 1.013, "intensity": 0.8}]}]}, {"id": "sc52", "name": "3 Aufbau & Refrain – Bühne", "duration": 36, "bg": {"type": "preset", "id": "buehne"}, "camera": {"x": 640, "y": 380, "zoom": 1.55, "follow": "pn"}, "fx": {"vignette": true, "fade": true, "shake": true}, "props": [], "audio": [{"id": "au52", "asset": "song1", "start": -52, "volume": 1, "sens": 1, "actor": "pn"}], "actors": [{"id": "pn", "name": "PS Peter", "kind": "cutout", "char": "peter_neu", "x": 640, "y": 640, "scale": 1.15, "flip": false, "look": {"height": 1, "shirtColor": "#ff5fa2", "motion": "flach"}, "clips": [{"id": "c10", "type": "klatschen", "start": 0.086, "dur": 11.842, "speed": 1.013, "intensity": 1}, {"id": "c11", "type": "huepfen", "start": 11.928, "dur": 3.947, "speed": 1.013, "intensity": 1}, {"id": "c12", "type": "disco", "start": 15.875, "dur": 10.263, "speed": 1.013, "intensity": 1}, {"id": "c13", "type": "jubeln", "start": 26.138, "dur": 1.974, "speed": 1.013, "intensity": 1}, {"id": "c14", "type": "tanzen", "start": 28.112, "dur": 7.838, "speed": 1.013, "intensity": 1}]}]}, {"id": "sc88", "name": "4 Strophe 2 – Party", "duration": 40, "bg": {"type": "preset", "id": "party"}, "camera": {"x": 640, "y": 380, "zoom": 1.0, "follow": ""}, "fx": {"vignette": true, "fade": true, "shake": true}, "props": [], "audio": [{"id": "au88", "asset": "song1", "start": -88, "volume": 1, "sens": 1, "actor": "pn"}], "actors": [{"id": "ki", "name": "KI-Mitbewohner", "kind": "cutout", "char": "ki_ps", "x": 1000, "y": 630, "scale": 1, "flip": true, "look": {"height": 1, "shirtColor": "#1f8f8c", "motion": "flach"}, "clips": [{"id": "kic5988", "type": "tanzen", "start": 0.007, "dur": 13.815, "speed": 1.013, "intensity": 1}, {"id": "kic6088", "type": "disco", "start": 13.822, "dur": 14.211, "speed": 1.013, "intensity": 1}, {"id": "kic6188", "type": "huepfen", "start": 28.033, "dur": 11.842, "speed": 1.013, "intensity": 1}]}, {"id": "baer", "name": "PS Bär", "kind": "cutout", "char": "baer_neu", "x": 360, "y": 630, "scale": 0.95, "flip": false, "look": {"height": 1, "shirtColor": "#e0559c", "motion": "flach"}, "clips": [{"id": "baerc3888", "type": "disco", "start": 0.007, "dur": 13.815, "speed": 1.013, "intensity": 1}, {"id": "baerc3988", "type": "tanzen", "start": 13.822, "dur": 14.211, "speed": 1.013, "intensity": 1}, {"id": "baerc4088", "type": "jubeln", "start": 28.033, "dur": 11.842, "speed": 1.013, "intensity": 1}]}, {"id": "fb", "name": "Freuerbeatz", "kind": "cutout", "char": "fb_neu", "x": 830, "y": 600, "scale": 0.9, "flip": false, "look": {"height": 1, "shirtColor": "#ff8a1f", "motion": "flach"}, "clips": [{"id": "fbfbc9088", "type": "disco", "start": 0, "dur": 0.797, "speed": 1.013, "intensity": 1}, {"id": "fbfbc9188", "type": "lachen", "start": 0.797, "dur": 3.157, "speed": 1, "intensity": 1}, {"id": "fbfbc9288", "type": "tanzen", "start": 3.954, "dur": 24.869, "speed": 1.013, "intensity": 0.9}, {"id": "fbfbc9388", "type": "huepfen", "start": 28.823, "dur": 11.127, "speed": 1.013, "intensity": 1}]}, {"id": "tom", "name": "Tom", "kind": "cutout", "char": "tom_ps", "x": 1110, "y": 585, "scale": 0.95, "flip": true, "look": {"height": 1, "shirtColor": "#ffc21a", "motion": "flach"}, "clips": [{"id": "tomc9188", "type": "lachen", "start": 0.007, "dur": 3.157, "speed": 1, "intensity": 1}, {"id": "tomc9288", "type": "tanzen", "start": 3.164, "dur": 24.869, "speed": 1.013, "intensity": 0.9}, {"id": "tomc9388", "type": "huepfen", "start": 28.033, "dur": 11.842, "speed": 1.013, "intensity": 1}]}, {"id": "lena", "name": "Sunny", "kind": "cutout", "char": "sunny_neu", "x": 190, "y": 585, "scale": 0.9, "flip": false, "look": {"height": 1, "shirtColor": "#e8b48e", "motion": "flach"}, "clips": [{"id": "lenac7788", "type": "tanzen", "start": 0.007, "dur": 28.026, "speed": 1.013, "intensity": 0.85}, {"id": "lenac7888", "type": "jubeln", "start": 28.033, "dur": 11.842, "speed": 1.013, "intensity": 1}]}, {"id": "pn", "name": "PS Peter", "kind": "cutout", "char": "peter_neu", "x": 640, "y": 640, "scale": 1.15, "flip": false, "look": {"height": 1, "shirtColor": "#ff5fa2", "motion": "flach"}, "clips": [{"id": "c15", "type": "tanzen", "start": 0.007, "dur": 11.842, "speed": 1.013, "intensity": 0.7}, {"id": "c16", "type": "gehen", "start": 11.849, "dur": 1.973, "speed": 1, "intensity": 1, "toX": 420, "toY": 640}, {"id": "c17", "type": "tanzen", "start": 13.822, "dur": 10.264, "speed": 1.013, "intensity": 0.8}, {"id": "c18", "type": "gehen", "start": 24.086, "dur": 1.973, "speed": 1, "intensity": 1, "toX": 640, "toY": 640}, {"id": "c19", "type": "klatschen", "start": 26.059, "dur": 1.974, "speed": 1.013, "intensity": 1}, {"id": "c20", "type": "huepfen", "start": 28.033, "dur": 3.947, "speed": 1.013, "intensity": 1}, {"id": "c21", "type": "disco", "start": 31.98, "dur": 7.895, "speed": 1.013, "intensity": 1}]}]}, {"id": "sc128", "name": "5 Bridge & Drop – Bühne", "duration": 28, "bg": {"type": "preset", "id": "buehne"}, "camera": {"x": 640, "y": 380, "zoom": 1.6, "follow": "pn"}, "fx": {"vignette": true, "fade": true, "shake": true}, "props": [], "audio": [{"id": "au128", "asset": "song1", "start": -128, "volume": 1, "sens": 1, "actor": "pn"}], "actors": [{"id": "pn", "name": "PS Peter", "kind": "cutout", "char": "peter_neu", "x": 640, "y": 640, "scale": 1.15, "flip": false, "look": {"height": 1, "shirtColor": "#ff5fa2", "motion": "flach"}, "clips": [{"id": "c22", "type": "nicken", "start": 0, "dur": 6.191, "speed": 1, "intensity": 1}, {"id": "c23", "type": "zeigen", "start": 6.191, "dur": 5.526, "speed": 1, "intensity": 1}, {"id": "c24", "type": "erschrecken", "start": 12.112, "dur": 1.974, "speed": 1, "intensity": 1}, {"id": "c25", "type": "huepfen", "start": 15.664, "dur": 6.316, "speed": 1.013, "intensity": 1}, {"id": "c26", "type": "jubeln", "start": 21.98, "dur": 5.921, "speed": 1.013, "intensity": 1}]}]}, {"id": "sc156", "name": "6 Ruhiger Teil – Kleinstadt", "duration": 20, "bg": {"type": "preset", "id": "kleinstadt"}, "camera": {"x": 640, "y": 400, "zoom": 1.35, "follow": "pn"}, "fx": {"vignette": true, "fade": true, "shake": true}, "props": [], "audio": [{"id": "au156", "asset": "song1", "start": -156, "volume": 1, "sens": 1, "actor": "pn"}], "actors": [{"id": "pn", "name": "PS Peter", "kind": "cutout", "char": "peter_neu", "x": 640, "y": 640, "scale": 1.15, "flip": false, "look": {"height": 1, "shirtColor": "#ff5fa2", "motion": "flach"}, "clips": [{"id": "c27", "type": "tanzen", "start": 0, "dur": 10.164, "speed": 1.013, "intensity": 0.75}, {"id": "c28", "type": "lachen", "start": 10.164, "dur": 1.974, "speed": 1, "intensity": 1}, {"id": "c29", "type": "klatschen", "start": 12.138, "dur": 7.812, "speed": 1.013, "intensity": 1}]}]}, {"id": "sc176", "name": "7 Finale – Party", "duration": 21.0, "bg": {"type": "preset", "id": "party"}, "camera": {"x": 640, "y": 380, "zoom": 1.0, "follow": ""}, "fx": {"vignette": true, "fade": true, "shake": true}, "props": [], "audio": [{"id": "au176", "asset": "song1", "start": -176, "volume": 1, "sens": 1, "actor": "pn"}], "actors": [{"id": "ki", "name": "KI-Mitbewohner", "kind": "cutout", "char": "ki_ps", "x": 1000, "y": 630, "scale": 1, "flip": true, "look": {"height": 1, "shirtColor": "#1f8f8c", "motion": "flach"}, "clips": [{"id": "kic69176", "type": "disco", "start": 0.033, "dur": 7.895, "speed": 1.013, "intensity": 1}, {"id": "kic70176", "type": "jubeln", "start": 7.928, "dur": 7.894, "speed": 1.013, "intensity": 1}, {"id": "kic71176", "type": "winken", "start": 15.822, "dur": 5.128, "speed": 1, "intensity": 1}]}, {"id": "baer", "name": "PS Bär", "kind": "cutout", "char": "baer_neu", "x": 360, "y": 630, "scale": 0.95, "flip": false, "look": {"height": 1, "shirtColor": "#e0559c", "motion": "flach"}, "clips": [{"id": "baerc47176", "type": "huepfen", "start": 0.033, "dur": 7.895, "speed": 1.013, "intensity": 1}, {"id": "baerc48176", "type": "jubeln", "start": 7.928, "dur": 7.894, "speed": 1.013, "intensity": 1}, {"id": "baerc49176", "type": "winken", "start": 15.822, "dur": 5.128, "speed": 1, "intensity": 1}]}, {"id": "fb", "name": "Freuerbeatz", "kind": "cutout", "char": "fb_neu", "x": 830, "y": 600, "scale": 0.9, "flip": false, "look": {"height": 1, "shirtColor": "#ff8a1f", "motion": "flach"}, "clips": [{"id": "fbfbc98176", "type": "huepfen", "start": 0, "dur": 0.823, "speed": 1.013, "intensity": 1}, {"id": "fbfbc99176", "type": "jubeln", "start": 0.823, "dur": 15.789, "speed": 1.013, "intensity": 1}, {"id": "fbfbc100176", "type": "winken", "start": 16.612, "dur": 4.338, "speed": 1, "intensity": 1}]}, {"id": "tom", "name": "Tom", "kind": "cutout", "char": "tom_ps", "x": 1110, "y": 585, "scale": 0.95, "flip": true, "look": {"height": 1, "shirtColor": "#ffc21a", "motion": "flach"}, "clips": [{"id": "tomc99176", "type": "jubeln", "start": 0.033, "dur": 15.789, "speed": 1.013, "intensity": 1}, {"id": "tomc100176", "type": "winken", "start": 15.822, "dur": 5.128, "speed": 1, "intensity": 1}]}, {"id": "lena", "name": "Sunny", "kind": "cutout", "char": "sunny_neu", "x": 190, "y": 585, "scale": 0.9, "flip": false, "look": {"height": 1, "shirtColor": "#e8b48e", "motion": "flach"}, "clips": [{"id": "lenac83176", "type": "jubeln", "start": 0.033, "dur": 15.789, "speed": 1.013, "intensity": 1}, {"id": "lenac84176", "type": "winken", "start": 15.822, "dur": 5.128, "speed": 1, "intensity": 1}]}, {"id": "pn", "name": "PS Peter", "kind": "cutout", "char": "peter_neu", "x": 640, "y": 640, "scale": 1.15, "flip": false, "look": {"height": 1, "shirtColor": "#ff5fa2", "motion": "flach"}, "clips": [{"id": "c30", "type": "huepfen", "start": 0.033, "dur": 3.947, "speed": 1.013, "intensity": 1}, {"id": "c31", "type": "disco", "start": 3.98, "dur": 5.921, "speed": 1.013, "intensity": 1}, {"id": "c32", "type": "tanzen", "start": 9.901, "dur": 5.921, "speed": 1.013, "intensity": 1}, {"id": "c33", "type": "winken", "start": 15.822, "dur": 5.128, "speed": 1, "intensity": 1}]}]}]};
 function musicVideo(hoch) {
   const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'audio/*,.mp3,.wav';
@@ -2166,7 +2261,7 @@ function musicVideo(hoch) {
   });
   inp.click();
 }
-function fileItems() { return [{ label: '🎵 Musikvideo „EINS ZWEI DREI VIER“ (Song wählen)', fn: () => musicVideo(false) }, { label: '🎵 … dasselbe hochkant 9:16', fn: () => musicVideo(true) }, '-', { label: '🎬 2.5D-Studio öffnen (neu)', fn: () => { location.href = '25d/'; } }, { label: '🎨 Klassisches 2D-Studio öffnen', fn: () => { location.href = '../'; } }, { label: '🧊 3D-Studio öffnen (Beta)', fn: () => { location.href = '../3d/'; } }, '-', { label: project.format === 'hoch' ? 'Format: Querformat 16:9' : 'Format: Hochkant 9:16 (TikTok, Reels)', fn: toggleFormat }, '-', { label: 'Projekt als JSON speichern', fn: exportJSON }, { label: 'JSON-Projekt öffnen …', fn: () => $('#fJson').click() }, '-',
+function fileItems() { return [{ label: '🎵 Musikvideo „EINS ZWEI DREI VIER“ (Song wählen)', fn: () => musicVideo(false) }, { label: '🎵 … dasselbe hochkant 9:16', fn: () => musicVideo(true) }, '-', { label: '🎵 Musikvideo aus deinem Song (automatisch)', fn: () => autoMusicVideo(false) }, { label: '🎵 … dasselbe hochkant 9:16', fn: () => autoMusicVideo(true) }, '-', { label: '🎬 2.5D-Studio öffnen (neu)', fn: () => { location.href = '25d/'; } }, { label: '🎨 Klassisches 2D-Studio öffnen', fn: () => { location.href = '../'; } }, { label: '🧊 3D-Studio öffnen (Beta)', fn: () => { location.href = '../3d/'; } }, '-', { label: project.format === 'hoch' ? 'Format: Querformat 16:9' : 'Format: Hochkant 9:16 (TikTok, Reels)', fn: toggleFormat }, '-', { label: 'Projekt als JSON speichern', fn: exportJSON }, { label: 'JSON-Projekt öffnen …', fn: () => $('#fJson').click() }, '-',
     { label: 'Aktuelles Bild als PNG', fn: exportPNG }, { label: ui.film ? 'Ganzen Film als Video aufnehmen' : 'Szene als Video aufnehmen', fn: exportVideo }, '-',
     { label: 'Beispielprojekt laden', fn: () => showModal('Beispielprojekt laden?', 'Das aktuelle Projekt wird ersetzt. Speichere es vorher, wenn du es behalten möchtest.', [{ label: 'Abbrechen' }, { label: 'Beispiel laden', primary: true, fn: () => loadData(exampleProject()) }]) },
     { label: 'Neues leeres Projekt', fn: () => showModal('Neues Projekt anlegen?', 'Das aktuelle Projekt wird ersetzt. Speichere es vorher, wenn du es behalten möchtest.', [{ label: 'Abbrechen' }, { label: 'Neu anlegen', primary: true, fn: () => loadData(blankProject()) }]) }]; }

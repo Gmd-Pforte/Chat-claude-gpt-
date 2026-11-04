@@ -13,6 +13,8 @@ Läuft am PC, Tablet und Handy. Keine Anmeldung, keine Cloud, keine kostenpflich
 - 15 Animationen, darunter Gehen, Laufen, Tanzen, Disco, Hüpfen, Jubeln, Klatschen, Winken, Zeigen, Sprechen, Lachen, Weinen, Erschrecken, Sitzen und eigene Posen
 - Zeitleiste mit Spuren pro Figur, verschiebbaren Blöcken, Audiospuren und mehreren Szenen
 - Audio-Import (MP3/WAV, z. B. aus ElevenLabs oder Suno) mit automatischer Mundbewegung
+- **Figuren reagieren auf Musik:** Das Studio erkennt Tempo (BPM), Taktschläge, Lautstärke und Bass. Figuren wippen und nicken im Takt, Tänze rasten auf den Beats ein, laute Stellen werden wilder (abschaltbar pro Szene und pro Figur)
+- **Musikvideo aus jedem Song:** Datei ▾ → „Musikvideo aus deinem Song“ – Song wählen, das Studio teilt ihn in ruhige, groovige und laute Teile und baut daraus Szenen mit Choreografie im Takt (quer oder hochkant)
 - Bühnen: Wohnzimmer, Park, Stadt, Kleinstadt, Bühne und Party, dazu eigene Hintergrundbilder, Gegenstände, Kamera und Film-Effekte
 - Export als **MP4-Video** (Bild für Bild berechnet, mit korrekter Länge), als PNG und als JSON
 
