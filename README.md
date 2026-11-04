@@ -36,7 +36,11 @@ Die Wiedergabe erfolgt über GitHub Pages (`.github/workflows/static.yml`), soba
 
 ## 2.5D-Studio (neu)
 
-Unter **/25d/** (oder über den Knopf **2.5D** im Studio) läuft die neue 2.5D-Ausgabe des Studios: dieselben Funktionen wie das 2D-Studio (Zeitleiste, Szenen, Audio, MP4-Export, Hochkant), aber nur mit den neuen flachen Figuren im South-Park-ähnlichen Bewegungsstil. Sie hat einen eigenen Projektspeicher und startet mit dem Beispiel „Peter 2.5D“ (Kleinstadt + Party).
+Unter **/25d/** (oder über den Knopf **2.5D** im Studio) läuft die 2.5D-Ausgabe des Studios. Sie kann alles, was das 2D-Studio kann (Zeitleiste, Szenen, Audio mit Mundbewegung, MP4-Export, Hochkant, Handy-Ansicht), mit eigenem Projektspeicher.
+
+- Alle gezeichneten Figuren (PS Peter, PS Peter klassisch, PS Bär, Sunny, Tom, KI-Mitbewohner, Freuerbeatz, PS Peter 3D) bewegen sich im **flachen 2.5D-Stil** (Körper wippt und kippt, Stummelbeine, fast gerade Arme, bleiben frontal). Pro Figur umschaltbar unter **Bewegungsstil**. Die klassischen Editor-Figuren Mensch und Bär sind auch dabei.
+- **Musikvideo per Knopf:** Datei ▾ → „Musikvideo EINS ZWEI DREI VIER“, Song auswählen – es entstehen 7 Szenen (Kleinstadt, Party mit der ganzen Crew, Bühne) im Takt von 152 BPM, quer oder hochkant. Der Song liegt nicht im Repo.
+- Startet mit dem Beispiel „Peter 2.5D“ (Kleinstadt + Party).
 
 ## 3D-Studio (Beta)
 
