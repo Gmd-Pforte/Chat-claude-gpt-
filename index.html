@@ -194,6 +194,7 @@ details.grp summary{font:600 14px var(--display);cursor:pointer;margin-bottom:8p
       <button class="btn" id="bOpen" title="Gespeicherte Projekte öffnen">Öffnen</button>
       <a class="btn" href="25d/" title="Neues 2.5D-Studio" style="text-decoration:none">2.5D</a>
       <a class="btn" href="3d/" title="3D-Studio (Beta)" style="text-decoration:none">3D</a>
+      <button class="btn" id="bLive" title="Live-Avatar mit Mikrofon">🎙 Live</button>
       <button class="btn" id="bExport" title="Export, Import, Video">Datei ▾</button>
       <button class="btn mob" id="bLib">Bibliothek</button>
       <button class="btn mob" id="bProps">Eigenschaften</button>
@@ -236,6 +237,7 @@ details.grp summary{font:600 14px var(--display);cursor:pointer;margin-bottom:8p
     <button class="mbtn" id="mbLib"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="7" r="3.5"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/></svg><span class="lbl">Figuren</span></button>
     <button class="mbtn" id="mbProps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg><span class="lbl">Bearbeiten</span></button>
     <button class="mbtn" id="mbPlay" aria-label="Abspielen"><span class="pc">▶</span></button>
+    <button class="mbtn" id="mbLive"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span class="lbl">Live</span></button>
     <button class="mbtn" id="mbTl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M8 10v9M14 14h4"/></svg><span class="lbl">Zeitleiste</span></button>
     <button class="mbtn" id="mbMore"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg><span class="lbl">Menü</span></button>
   </nav>
@@ -251,7 +253,8 @@ details.grp summary{font:600 14px var(--display);cursor:pointer;margin-bottom:8p
 
 <script>
 'use strict';
-const APP_VERSION = '2.9';
+const APP_VERSION = '3.0';
+var LIVE = null; // Live-Avatar-Zustand (siehe unten)
 /* =====================================================================
    PS Cartoon Studio 1.0
    Aufbau:
@@ -446,6 +449,7 @@ function evalActor(sc, a, t) {
     const m = clamp((amp - 0.1) * 1.35 * (au.sens ?? 1), 0, 1);
     p.mouth = Math.max(p.mouth, m); p.head += m * 3; p.brow += m * 0.25;
   }
+  if (LIVE && LIVE.active === a.id && LIVE.level > 0.03) { const m = LIVE.level; p.mouth = Math.max(p.mouth, m); p.head += m * 4; p.brow += m * 0.3; }
   if (p.mouth > 0.08) p.mw = 0.72 + 0.55 * (0.5 + 0.5 * Math.sin(t * 9.7 + h) * Math.sin(t * 4.3 + h * 0.5));
   // Drehung gezeichneter Figuren ins Halbprofil (beim Gehen und beim Reden)
   let turn = 0, speak = false;
@@ -461,6 +465,7 @@ function evalActor(sc, a, t) {
       }
     }
   }
+  if (a._live) { const Lv = a._live; x = Lv.x; facing = Lv.facing; if (Lv.walkW > 0.01) blend(p, walkPose(Lv.phase, false), Lv.walkW); }
   // Blinzeln
   const ph = (t + 0.5 + (h % 10) * 0.3) % 3.9;
   if (ph > 3.74) p.eyes *= Math.abs(ph - 3.82) / 0.08;
@@ -2191,6 +2196,195 @@ $('#bExport').addEventListener('click', e => {
   const r = e.currentTarget.getBoundingClientRect();
   showMenu(r.left, r.bottom + 6, fileItems());
 });
+// ---------- Live-Avatar: Figuren live steuern, per Mikrofon sprechen lassen, aufnehmen ----------
+const LIVE_ONCE = ['winken', 'zeigen', 'nicken', 'schuetteln', 'lachen', 'weinen', 'erschrecken', 'jubeln'], LIVE_LOOP = ['tanzen', 'disco', 'huepfen', 'klatschen', 'sprechen'];
+const LIVE_ICON = { winken: '👋', zeigen: '👉', nicken: '🙂', schuetteln: '🙅', lachen: '😂', weinen: '😢', erschrecken: '😱', jubeln: '🙌', tanzen: '💃', disco: '🕺', huepfen: '🦘', klatschen: '👏', sprechen: '💬' };
+function liveCSS() {
+  if ($('#liveCSS')) return; const st = document.createElement('style'); st.id = 'liveCSS';
+  st.textContent = `#live{position:fixed;inset:0;z-index:90;background:#0b0a10;display:flex;flex-direction:column;color:var(--text,#eee);padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+#live .lbar{display:flex;align-items:center;gap:8px;padding:8px 10px;flex-wrap:wrap}
+#live .lbar b{font-size:15px;margin-right:auto}
+#live .lstage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:4px;position:relative}
+#live canvas{width:100%;height:100%;object-fit:contain;touch-action:none;display:block}
+#live .lpanel{max-height:46vh;overflow:auto;padding:6px 10px 10px;border-top:1px solid var(--line,#333);background:var(--panel,#16141d)}
+#live h5{margin:8px 0 6px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;opacity:.65}
+#live .lrow{display:flex;gap:6px;flex-wrap:wrap}
+#live .lbtn{min-width:52px;height:44px;padding:0 10px;border-radius:12px;border:1px solid var(--line,#333);background:#221f2c;color:inherit;font-size:14px;display:inline-flex;align-items:center;justify-content:center;gap:6px;user-select:none;-webkit-user-select:none;touch-action:none}
+#live .lbtn.on{background:#ff5fa2;border-color:#ff5fa2;color:#fff}
+#live .lbtn.act{outline:3px solid #ffd166;outline-offset:1px}
+#live .lbtn.big{min-width:76px;font-size:22px}
+#live .lbtn.rec.on{background:#e5383b;border-color:#e5383b;animation:lpulse 1s infinite}
+@keyframes lpulse{50%{opacity:.6}}
+#live .meter{width:70px;height:8px;border-radius:5px;background:#2b2836;overflow:hidden}#live .meter i{display:block;height:100%;width:0;background:#4fd1c5}
+#live .lres{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);display:flex;gap:8px;flex-wrap:wrap;justify-content:center;background:rgba(20,18,28,.92);padding:10px;border-radius:14px;max-width:94%}
+#live .lhint{font-size:12px;opacity:.7;margin:6px 0 0}
+#live .ltime{font-variant-numeric:tabular-nums;font-size:13px;color:#e5383b;min-width:44px}`;
+  document.head.append(st);
+}
+function liveActor() { return LIVE && LIVE.sc.actors.find(a => a.id === LIVE.active) || null; }
+function liveOpen() {
+  if (LIVE) return; if (playing) pause(); hideMenu(); closeSheets(); liveCSS();
+  const sc = { id: 'live', name: 'Live', duration: 1e6, bg: deep(scene().bg), camera: { x: W / 2, y: 380, zoom: 1, follow: '' }, fx: { vignette: true, fade: false, shake: true }, actors: [], props: [], audio: [], react: false };
+  LIVE = { sc, t0: performance.now(), t: 0, active: null, level: 0, sens: 1, hold: 0, moves: [], walk: null };
+  const root = el('div'); root.id = 'live'; document.body.append(root); LIVE.root = root;
+  const bar = el('div', 'lbar'); bar.append(el('b', '', '🎙 Live-Avatar'));
+  const micB = el('button', 'lbtn', '🎙 Mikro an'), meter = el('div', 'meter'); meter.append(el('i'));
+  const recB = el('button', 'lbtn rec', '⏺ Aufnehmen'), tm = el('span', 'ltime', ''), close = el('button', 'lbtn', '✕');
+  micB.addEventListener('click', liveMic); recB.addEventListener('click', liveRec); close.addEventListener('click', liveClose);
+  bar.append(micB, meter, recB, tm, close); root.append(bar); Object.assign(LIVE, { micB, meter: meter.firstChild, recB, tm });
+  const stg = el('div', 'lstage'), cv = document.createElement('canvas'); stg.append(cv); root.append(stg); LIVE.cv = cv; LIVE.ctx = cv.getContext('2d'); LIVE.stg = stg;
+  cv.addEventListener('pointerdown', livePick);
+  const pan = el('div', 'lpanel'); root.append(pan); LIVE.pan = pan;
+  const ids = Object.keys(CUTOUTS).filter(id => !CUTOUTS[id].hidden);
+  liveAdd(ids.includes('peter_neu') ? 'peter_neu' : ids[0]);
+  liveRender();
+  window.addEventListener('keydown', liveKey); window.addEventListener('keyup', liveKey);
+  LIVE.raf = requestAnimationFrame(liveFrame);
+  toast('Live-Modus: Mikro an, Figur antippen, Knöpfe drücken – los geht’s!');
+}
+function liveClose() {
+  if (!LIVE) return; const L = LIVE;
+  if (L.rec && L.rec.state !== 'inactive') { L.discard = true; L.rec.stop(); }
+  if (L.arec && L.arec.state !== 'inactive') L.arec.stop();
+  if (L.stream) L.stream.getTracks().forEach(t => t.stop());
+  cancelAnimationFrame(L.raf); L.root.remove(); LIVE = null;
+  window.removeEventListener('keydown', liveKey); window.removeEventListener('keyup', liveKey); drawStage();
+}
+function liveLayout() {
+  const n = LIVE.sc.actors.length, hoch = project.format === 'hoch', gap = hoch ? 190 : 270;
+  LIVE.sc.actors.forEach((a, i) => { a._live.x = W / 2 + (i - (n - 1) / 2) * gap; a.y = 650; a.scale = hoch ? 1.25 : 1.15; });
+}
+function liveAdd(id) {
+  const a = newCutout(id); a.look.motion = 'flach'; a._live = { x: W / 2, facing: 1, walkW: 0, phase: 0 }; a.clips = [];
+  LIVE.sc.actors.push(a); LIVE.active = a.id; liveLayout();
+}
+function liveRemove(id) { const L = LIVE, i = L.sc.actors.findIndex(a => a.char === id); if (i < 0) return; if (L.sc.actors.length === 1) { toast('Mindestens eine Figur bleibt auf der Bühne.'); return; } const [a] = L.sc.actors.splice(i, 1); if (L.active === a.id) L.active = L.sc.actors[0].id; liveLayout(); }
+function liveRender() {
+  const L = LIVE, pan = L.pan; pan.innerHTML = ''; const act = liveActor();
+  const B = (label, fn, cls) => { const b = el('button', 'lbtn' + (cls ? ' ' + cls : ''), label); b.addEventListener('click', fn); return b; };
+  pan.append(el('h5', '', 'Figuren – antippen = auf die Bühne, nochmal = sprechen lassen'));
+  const fr = el('div', 'lrow'); Object.keys(CUTOUTS).filter(id => !CUTOUTS[id].hidden).forEach(id => {
+    const on = L.sc.actors.find(a => a.char === id), b = B(CUTOUTS[id].label, () => { if (!on) liveAdd(id); else if (L.active === on.id) liveRemove(id); else L.active = on.id; liveRender(); }, (on ? 'on' : '') + (on && on.id === L.active ? ' act' : ''));
+    b.title = on ? (on.id === L.active ? 'Spricht gerade – nochmal tippen zum Entfernen' : 'Antippen: diese Figur steuern') : 'Auf die Bühne holen'; fr.append(b); });
+  pan.append(fr);
+  pan.append(el('h5', '', 'Aktionen' + (act ? ' – ' + act.name : '')));
+  const ar = el('div', 'lrow');
+  LIVE_ONCE.forEach(t => ar.append(B(LIVE_ICON[t] + ' ' + ANIMS[t].label, () => liveAction(t))));
+  LIVE_LOOP.forEach(t => { const on = act && act.clips.some(c => c.type === t && c._open); ar.append(B(LIVE_ICON[t] + ' ' + ANIMS[t].label, () => liveAction(t), on ? 'on' : '')); });
+  pan.append(ar);
+  pan.append(el('h5', '', 'Bewegen'));
+  const mr = el('div', 'lrow'), hold = (lbl, d) => { const b = el('button', 'lbtn big', lbl); const up = () => { liveHold(0); b.classList.remove('on'); };
+    b.addEventListener('pointerdown', e => { e.preventDefault(); b.setPointerCapture && b.setPointerCapture(e.pointerId); liveHold(d); b.classList.add('on'); }); b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up); b.addEventListener('lostpointercapture', up); return b; };
+  mr.append(hold('◀', -1), hold('▶', 1), B('↔ Umdrehen', () => { const a = liveActor(); if (a) a._live.facing *= -1; }));
+  pan.append(mr);
+  pan.append(el('h5', '', 'Bühne & Mikro'));
+  const br = el('div', 'lrow'), sel = document.createElement('select'); sel.className = 'lbtn';
+  Object.keys(BGS).forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = BGS[k].label; if (L.sc.bg.type === 'preset' && L.sc.bg.id === k) o.selected = true; sel.append(o); });
+  sel.addEventListener('change', () => { L.sc.bg = { type: 'preset', id: sel.value }; });
+  const sens = document.createElement('input'); sens.type = 'range'; sens.min = 0.3; sens.max = 3; sens.step = 0.1; sens.value = L.sens; sens.style.width = '140px'; sens.addEventListener('input', () => { L.sens = +sens.value; });
+  const sl = el('label', 'lbtn', 'Empfindlichkeit '); sl.append(sens); br.append(sel, sl); pan.append(br);
+  pan.append(el('p', 'lhint', 'Tipp: Figur auf der Bühne antippen, um sie zu steuern. „Als Szene übernehmen“ macht aus deiner Aufnahme eine bearbeitbare Szene mit deiner Stimme – die kannst du danach sauber als MP4 exportieren.'));
+}
+function liveAction(type) {
+  const a = liveActor(); if (!a) return; const t = LIVE.t;
+  if (LIVE_LOOP.includes(type)) {
+    const open = a.clips.find(c => c.type === type && c._open);
+    a.clips.forEach(c => { if (c._open) { c.dur = Math.max(0.4, t - c.start); delete c._open; } });
+    if (!open) a.clips.push(clip(type, t, 9999, { _open: true }));
+    liveRender();
+  } else a.clips.push(clip(type, t, ANIMS[type].dur));
+}
+function liveHold(d) {
+  const L = LIVE, a = liveActor(); if (!a) return;
+  if (d && !L.walk) L.walk = { id: a.id, start: L.t, y: a.y };
+  if (!d && L.walk) { const w = L.walk, b = L.sc.actors.find(x => x.id === w.id); if (b) L.moves.push({ id: w.id, start: w.start, dur: Math.max(0.3, L.t - w.start), toX: Math.round(b._live.x) }); L.walk = null; }
+  L.hold = d;
+}
+function liveKey(e) {
+  if (!LIVE || /input|select|textarea/i.test(e.target.tagName || '')) return;
+  const down = e.type === 'keydown';
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); if (down && !e.repeat) liveHold(e.key === 'ArrowLeft' ? -1 : 1); else if (!down) liveHold(0); }
+  else if (down && e.key === 'Escape') liveClose();
+  else if (down && !e.repeat && /^[1-9]$/.test(e.key)) { const all = LIVE_ONCE.concat(LIVE_LOOP); liveAction(all[+e.key - 1]); }
+}
+function livePick(e) {
+  const L = LIVE, r = L.cv.getBoundingClientRect(), { OW, OH } = outSize(), f = Math.min(r.width / OW, r.height / OH);
+  const vx = (e.clientX - r.left - (r.width - OW * f) / 2) / f, cam = camOf(L.sc, L.t), wx = (vx - OW / 2) / cam.s + cam.x;
+  let best = null, bd = 160; for (const a of L.sc.actors) { const d = Math.abs(a._live.x - wx); if (d < bd) { bd = d; best = a; } }
+  if (best && best.id !== L.active) { L.active = best.id; liveRender(); }
+}
+async function liveMic() {
+  const L = LIVE; if (!L) return;
+  if (L.stream) { L.stream.getTracks().forEach(t => t.stop()); L.stream = null; L.an = null; L.level = 0; L.micB.textContent = '🎙 Mikro an'; L.micB.classList.remove('on'); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    const ac = getAC(); if (ac.state === 'suspended') await ac.resume();
+    const src = ac.createMediaStreamSource(stream), an = ac.createAnalyser(); an.fftSize = 1024; src.connect(an);
+    Object.assign(L, { stream, an, buf: new Float32Array(an.fftSize) }); L.micB.textContent = '🎙 Mikro aus'; L.micB.classList.add('on');
+  } catch (err) { console.warn(err); toast('Kein Zugriff aufs Mikrofon – bitte im Browser erlauben.'); }
+}
+function liveFrame(now) {
+  const L = LIVE; if (!L) return;
+  const dt = Math.min(0.05, (now - (L.last || now)) / 1000); L.last = now; L.t = (now - L.t0) / 1000;
+  if (L.an) { L.an.getFloatTimeDomainData(L.buf); let s = 0; for (let i = 0; i < L.buf.length; i++) s += L.buf[i] * L.buf[i];
+    const rms = Math.sqrt(s / L.buf.length), tgt = clamp((rms - 0.01) * 10 * L.sens, 0, 1); L.level += (tgt - L.level) * (tgt > L.level ? 0.55 : 0.22); L.meter.style.width = Math.round(L.level * 100) + '%'; }
+  for (const a of L.sc.actors) { const lv = a._live, mv = a.id === (L.walk && L.walk.id) ? L.hold : 0;
+    lv.walkW += ((mv ? 1 : 0) - lv.walkW) * Math.min(1, dt * 8);
+    if (mv) { const R = rig(a), stride = ANIMS.gehen.stride * a.scale * (a.look.height || 1) * ((R.thigh + R.shin) / 102); lv.facing = mv; lv.x = clamp(lv.x + mv * 200 * dt, 40, W - 40); lv.phase += 200 * dt / stride; } }
+  if (L.rec) { const d = L.t - L.recStart; L.tm.textContent = Math.floor(d / 60) + ':' + String(Math.floor(d % 60)).padStart(2, '0'); }
+  const { OW, OH } = outSize(); if (L.cv.width !== OW || L.cv.height !== OH) { L.cv.width = OW; L.cv.height = OH; }
+  const c = L.ctx; c.setTransform(1, 0, 0, 1, 0, 0); renderScene(c, L.sc, L.t, true, 1);
+  L.raf = requestAnimationFrame(liveFrame);
+}
+function liveRec() {
+  const L = LIVE; if (!L) return;
+  if (L.rec) { L.rec.stop(); if (L.arec && L.arec.state !== 'inactive') L.arec.stop(); return; }
+  if (!window.MediaRecorder || !L.cv.captureStream) { toast('Aufnehmen wird von diesem Browser nicht unterstützt.'); return; }
+  const tracks = L.cv.captureStream(30).getVideoTracks(); if (L.stream) tracks.push(...L.stream.getAudioTracks());
+  const pick = list => list.find(m => MediaRecorder.isTypeSupported(m)) || '';
+  const vm = pick(['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']);
+  const rec = new MediaRecorder(new MediaStream(tracks), vm ? { mimeType: vm, videoBitsPerSecond: 6e6 } : {}), vc = [];
+  rec.ondataavailable = e => { if (e.data && e.data.size) vc.push(e.data); };
+  L.audioBlob = null; L.arec = null;
+  if (L.stream) { const am = pick(['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm']); const ar = new MediaRecorder(L.stream, am ? { mimeType: am } : {}), ac = [];
+    ar.ondataavailable = e => { if (e.data && e.data.size) ac.push(e.data); }; ar.onstop = () => { L.audioBlob = new Blob(ac, { type: ar.mimeType || am || 'audio/webm' }); }; ar.start(500); L.arec = ar; }
+  L.recStart = L.t; L.recMic = L.active; L.recSnap = {}; L.sc.actors.forEach(a => { L.recSnap[a.id] = { x: a._live.x, facing: a._live.facing, clips: a.clips.length }; });
+  L.moves = L.moves.filter(m => m.start + m.dur > L.t);
+  rec.onstop = () => { if (!LIVE || L.discard) return; L.recEnd = L.t; L.rec = null; L.recB.classList.remove('on'); L.recB.textContent = '⏺ Aufnehmen'; L.tm.textContent = '';
+    L.video = new Blob(vc, { type: rec.mimeType || vm || 'video/webm' }); liveResult(); };
+  rec.start(500); L.rec = rec; L.recB.classList.add('on'); L.recB.textContent = '⏹ Stopp';
+  if (!L.stream) toast('Tipp: Mikro einschalten, damit deine Stimme mit aufgenommen wird.');
+}
+function liveResult() {
+  const L = LIVE, box = el('div', 'lres'); const ext = (L.video.type || '').includes('mp4') ? 'mp4' : 'webm';
+  const b1 = el('button', 'lbtn on', '🎬 Als Szene übernehmen'), b2 = el('button', 'lbtn', '⬇ Video speichern (' + ext + ')'), b3 = el('button', 'lbtn', 'Verwerfen');
+  b1.addEventListener('click', async () => { box.remove(); await liveToScene(); });
+  b2.addEventListener('click', () => download(L.video, fileBase() + '-live.' + ext));
+  b3.addEventListener('click', () => box.remove());
+  box.append(b1, b2, b3); L.stg.append(box);
+}
+async function liveToScene() {
+  const L = LIVE, t0 = L.recStart, t1 = L.recEnd || L.t, dur = Math.max(0.5, t1 - t0), r3 = v => Math.round(v * 1000) / 1000;
+  if (L.arec && L.arec.state !== 'inactive') { L.arec.stop(); await new Promise(res => setTimeout(res, 300)); }
+  const s = newScene('Live-Aufnahme ' + (project.scenes.length + 1)); s.duration = r3(dur); s.bg = deep(L.sc.bg); s.camera = { x: W / 2, y: 380, zoom: 1, follow: '' };
+  const idMap = {};
+  for (const la of L.sc.actors) {
+    const a = deep(la), snap = L.recSnap[la.id] || { x: la._live.x, facing: la._live.facing }; delete a._live; a.id = uid(); idMap[la.id] = a.id;
+    a.x = Math.round(snap.x); a.flip = snap.facing < 0;
+    a.clips = la.clips.filter(c => c.start < t1 && (c._open || c.start + c.dur > t0)).map(c => { const st = Math.max(c.start, t0), en = Math.min(c._open ? t1 : c.start + c.dur, t1);
+      const n = Object.assign({}, c, { id: uid(), start: r3(st - t0), dur: r3(Math.max(0.3, en - st)) }); delete n._open; return n; });
+    for (const m of L.moves) if (m.id === la.id && m.start < t1 && m.start + m.dur > t0) a.clips.push(clip('gehen', r3(Math.max(0, m.start - t0)), r3(Math.min(m.dur, t1 - m.start)), { toX: m.toX, toY: a.y }));
+    s.actors.push(a);
+  }
+  if (L.audioBlob && L.audioBlob.size > 2000) {
+    try { const id = uid(); assets[id] = { type: 'audio', name: 'Live-Mikro', mime: L.audioBlob.type, data: await fileToDataURL(L.audioBlob) }; await decodeAsset(id);
+      s.audio.push({ id: uid(), asset: id, start: 0, volume: 1, sens: 1.3, actor: idMap[L.recMic] || null }); }
+    catch (e) { console.warn('Mikro-Aufnahme nicht lesbar', e); toast('Die Mikrofon-Aufnahme konnte nicht übernommen werden.'); }
+  }
+  project.scenes.push(s); project.active = project.scenes.length - 1; time = 0;
+  liveClose(); commit(); renderAll(); toast('Live-Aufnahme ist jetzt Szene ' + project.scenes.length + ' – bearbeiten oder als MP4 exportieren.');
+}
+
 // ---------- Automatisches Musikvideo aus jedem Song ----------
 // Analysiert Tempo und Lautstärke, teilt den Song in Abschnitte (ruhig / mittel / laut) und baut daraus Szenen mit Choreografie im Takt.
 function buildMusicVideo(rx, dur, name, hoch) {
@@ -2237,7 +2431,7 @@ function autoMusicVideo(hoch) {
   });
   inp.click();
 }
-function fileItems() { return [{ label: '🎵 Musikvideo aus deinem Song (automatisch)', fn: () => autoMusicVideo(false) }, { label: '🎵 … dasselbe hochkant 9:16', fn: () => autoMusicVideo(true) }, '-', { label: '🎬 2.5D-Studio öffnen (neu)', fn: () => { location.href = '25d/'; } }, { label: '🧊 3D-Studio öffnen (Beta)', fn: () => { location.href = '3d/'; } }, '-', { label: project.format === 'hoch' ? 'Format: Querformat 16:9' : 'Format: Hochkant 9:16 (TikTok, Reels)', fn: toggleFormat }, '-', { label: 'Projekt als JSON speichern', fn: exportJSON }, { label: 'JSON-Projekt öffnen …', fn: () => $('#fJson').click() }, '-',
+function fileItems() { return [{ label: '🎙 Live-Avatar (Mikrofon)', fn: liveOpen }, '-', { label: '🎵 Musikvideo aus deinem Song (automatisch)', fn: () => autoMusicVideo(false) }, { label: '🎵 … dasselbe hochkant 9:16', fn: () => autoMusicVideo(true) }, '-', { label: '🎬 2.5D-Studio öffnen (neu)', fn: () => { location.href = '25d/'; } }, { label: '🧊 3D-Studio öffnen (Beta)', fn: () => { location.href = '3d/'; } }, '-', { label: project.format === 'hoch' ? 'Format: Querformat 16:9' : 'Format: Hochkant 9:16 (TikTok, Reels)', fn: toggleFormat }, '-', { label: 'Projekt als JSON speichern', fn: exportJSON }, { label: 'JSON-Projekt öffnen …', fn: () => $('#fJson').click() }, '-',
     { label: 'Aktuelles Bild als PNG', fn: exportPNG }, { label: ui.film ? 'Ganzen Film als Video aufnehmen' : 'Szene als Video aufnehmen', fn: exportVideo }, '-',
     { label: 'Beispielprojekt laden', fn: () => showModal('Beispielprojekt laden?', 'Das aktuelle Projekt wird ersetzt. Speichere es vorher, wenn du es behalten möchtest.', [{ label: 'Abbrechen' }, { label: 'Beispiel laden', primary: true, fn: () => loadData(exampleProject()) }]) },
     { label: 'Neues leeres Projekt', fn: () => showModal('Neues Projekt anlegen?', 'Das aktuelle Projekt wird ersetzt. Speichere es vorher, wenn du es behalten möchtest.', [{ label: 'Abbrechen' }, { label: 'Neu anlegen', primary: true, fn: () => loadData(blankProject()) }]) }]; }
@@ -2267,6 +2461,8 @@ $('#mbPlay').addEventListener('click', () => playing ? pause() : play());
 $('#immPlay').addEventListener('click', () => playing ? pause() : play());
 $('#mbTl').addEventListener('click', () => { closeSheets(); $('#app').classList.toggle('tl-open'); syncMobBar(); requestAnimationFrame(() => { renderTimeline(); updatePlayhead(true); }); });
 $('#mSeek').addEventListener('input', e => setTime(+e.target.value));
+$('#bLive').addEventListener('click', liveOpen);
+$('#mbLive').addEventListener('click', liveOpen);
 $('#mbMore').addEventListener('click', () => {
   if (!menuEl.hidden) { hideMenu(); return; }
   closeSheets();
@@ -2301,6 +2497,7 @@ $('#bLib').addEventListener('click', () => toggleSheet('left'));
 $('#bProps').addEventListener('click', () => toggleSheet('right'));
 document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeSheets));
 document.addEventListener('keydown', e => {
+  if (LIVE) return;
   const tag = (e.target.tagName || '').toLowerCase(); if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
   if (e.key === 'Escape') { hideMenu(); if (!recording) closeModal(); return; }
   if (!$('#modalWrap').hidden) return;
