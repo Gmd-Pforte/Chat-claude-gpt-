@@ -251,7 +251,7 @@ details.grp summary{font:600 14px var(--display);cursor:pointer;margin-bottom:8p
 
 <script>
 'use strict';
-const APP_VERSION = '1.0';
+const APP_VERSION = '1.1';
 const STUDIO25 = true; // 2.5D-Ausgabe: nur flache Figuren, eigener Speicher
 /* =====================================================================
    PS Cartoon Studio 1.0
@@ -2053,7 +2053,7 @@ async function mixAudio(scenes) {
     const len = Math.max(1, Math.ceil(sc.duration * SR)), clips = sc.audio.filter(a => audioCache[a.asset]);
     if (clips.length) {
       any = true; const oc = new OfflineAudioContext(2, len, SR);
-      for (const a of clips) { const src = oc.createBufferSource(); src.buffer = audioCache[a.asset].buffer; const g = oc.createGain(); g.gain.value = a.volume ?? 1; src.connect(g); g.connect(oc.destination); src.start(Math.max(0, a.start)); }
+      for (const a of clips) { const src = oc.createBufferSource(); src.buffer = audioCache[a.asset].buffer; const g = oc.createGain(); g.gain.value = a.volume ?? 1; src.connect(g); g.connect(oc.destination); src.start(Math.max(0, a.start), Math.max(0, -a.start)); }
       const buf = await oc.startRendering(), l = buf.getChannelData(0), r = buf.numberOfChannels > 1 ? buf.getChannelData(1) : l;
       L.set(l.subarray(0, Math.min(len, total - pos)), pos); Rr.set(r.subarray(0, Math.min(len, total - pos)), pos);
     }
