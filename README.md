@@ -9,10 +9,11 @@ Läuft am PC, Tablet und Handy. Keine Anmeldung, keine Cloud, keine kostenpflich
 ## Funktionen
 
 - Figuren mit Gelenken: per Code gezeichnete Figuren (Mensch, Bär) mit Editor sowie **gezeichnete Cut-out-Figuren** aus eigenen Teilebögen: **PS Peter** (neu, aus Teilebogen + Gesichtsbogen mit Kappe, Brille und Schnurrbart als eigene Ebenen, Augen schauen in Blickrichtung, 8 Münder), **PS Peter (klassisch)**, **PS Bär**, **Sunny**, **Tom**, **KI-Mitbewohner** **Freuerbeatz** (Adler) und **PS Peter 3D**. PS Peter und PS Bär drehen sich beim Gehen und Reden automatisch ins Halbprofil (eigener Teilebogen `teilebogen-schraeg.png`)
+- **Flacher 2.5D-Bewegungsstil** (im Stil von Papier-Cut-out-Serien): Der neue PS Peter bewegt sich wie eine flache Figur – Körper wippt und kippt, kurze Beine heben die Füße, Arme bleiben fast gerade. Pro Figur umschaltbar unter **Bearbeiten → Bewegungsstil** (flach / Gelenke). Beispiel: `projekte/peter-2-5d-beispiel.json`
 - 15 Animationen, darunter Gehen, Laufen, Tanzen, Disco, Hüpfen, Jubeln, Klatschen, Winken, Zeigen, Sprechen, Lachen, Weinen, Erschrecken, Sitzen und eigene Posen
 - Zeitleiste mit Spuren pro Figur, verschiebbaren Blöcken, Audiospuren und mehreren Szenen
 - Audio-Import (MP3/WAV, z. B. aus ElevenLabs oder Suno) mit automatischer Mundbewegung
-- Bühnen: Wohnzimmer, Park, Stadt, Bühne und Party, dazu eigene Hintergrundbilder, Gegenstände, Kamera und Film-Effekte
+- Bühnen: Wohnzimmer, Park, Stadt, Kleinstadt, Bühne und Party, dazu eigene Hintergrundbilder, Gegenstände, Kamera und Film-Effekte
 - Export als **MP4-Video** (Bild für Bild berechnet, mit korrekter Länge), als PNG und als JSON
 
 ## Aufbau
